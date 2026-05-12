@@ -22,7 +22,7 @@
   "homepage": "https://github.com/johngeorgewright/ts-mono-repo#readme",
   "devDependencies": {
     "@types/lodash.set": "4.3.9",
-    "@types/node": "24.12.3",
+    "@types/node": "24.12.4",
     "@vitest/runner": "4.1.6",
     "lodash.set": "4.3.2",
     "rimraf": "6.1.3",
