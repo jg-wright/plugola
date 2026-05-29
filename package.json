@@ -36,7 +36,7 @@
     "nx": "22.7.5",
     "prettier": "3.8.3",
     "ts-node": "10.9.2",
-    "typescript": "5.9.3",
+    "typescript": "6.0.3",
     "yo": "5.1.0"
   },
   "config": {
