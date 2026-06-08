@@ -1,6 +1,6 @@
 {
   "name": "@plugola/message-bus",
-  "version": "6.0.2",
+  "version": "6.0.3",
   "description": "Plugola event management",
   "type": "module",
   "exports": {
@@ -33,7 +33,7 @@
   "dependencies": {
     "@johngw/async": "^5.0.1",
     "@johngw/async-iterator": "^4.0.1",
-    "@plugola/invoke": "^2.0.2",
+    "@plugola/invoke": "^2.0.3",
     "ts-toolbelt": "^9.6.0",
     "tslib": "^2.8.1"
   }
