@@ -1,6 +1,0 @@
-import foo from '../src/index.js'
-import { expect, test } from 'vitest'
-
-test('foo()', () => {
-  expect(foo()).toBe('bar')
-})

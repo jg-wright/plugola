@@ -8,13 +8,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build:generator": "yarn workspace @plugola/generator run build",
-    "clean": "yarn workspaces foreach --all --verbose run clean",
-    "commit": "git-cz",
-    "package:generate": "node --require ts-node/register $(yarn bin yo) ./packages/generator/src/package-generate",
-    "package:remove": "node --require ts-node/register $(yarn bin yo) ./packages/generator/src/package-remove",
+    "build": "tsc --build",
+    "clean": "tsc --build --clean && rm -rf packages/*/dist",
     "prepare": "husky",
-    "start": "yarn build && yarn workspaces foreach --all --interlaced --exclude @plugola/generator --parallel --interlaced --verbose --jobs unlimited run start"
+    "start": "tsc --build --watch"
   },
   "author": "",
   "license": "UNLICENSED",
@@ -23,21 +20,20 @@
   },
   "homepage": "https://github.com/johngeorgewright/ts-mono-repo#readme",
   "devDependencies": {
-    "@commitlint/cli": "20.5.3",
-    "@commitlint/config-conventional": "20.5.3",
-    "@vitest/runner": "4.1.7",
+    "@commitlint/cli": "21.0.2",
+    "@commitlint/config-conventional": "21.0.2",
+    "@types/node": "25.9.2",
+    "@vitest/runner": "4.1.8",
     "ci-info": "4.4.0",
     "commitizen": "4.3.1",
     "cz-conventional-changelog": "3.3.0",
     "husky": "9.1.7",
     "lerna": "^9.0.7",
-    "lint-staged": "16.4.0",
+    "lint-staged": "17.0.7",
     "mkdirp-infer-owner": "2.0.0",
     "nx": "22.7.5",
     "prettier": "3.8.3",
-    "ts-node": "10.9.2",
-    "typescript": "5.9.3",
-    "yo": "5.1.0"
+    "typescript": "6.0.3"
   },
   "config": {
     "commitizen": {
@@ -52,5 +48,8 @@
   "dependencies": {
     "tslib": "2.8.1"
   },
-  "packageManager": "yarn@4.15.0"
+  "packageManager": "yarn@4.16.0",
+  "resolutions": {
+    "@johngw/stream-common": "file:///Users/john.wright/Workspace/stream/packages/stream-common"
+  }
 }

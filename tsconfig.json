@@ -1,19 +1,36 @@
 {
   "compilerOptions": {
-    "target": "esnext",
-    "module": "nodenext",
-    "lib": ["dom", "es2022"],
-    "importHelpers": true,
+    "composite": true,
     "declaration": true,
-    "sourceMap": true,
-    "outDir": "./dist",
-    "strict": true,
+    "esModuleInterop": true,
+    "importHelpers": true,
+    "incremental": true,
+    "lib": ["es2020"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "noImplicitOverride": true,
-    "moduleResolution": "nodenext",
-    "esModuleInterop": true,
-    "resolveJsonModule": true
-  }
+    "resolveJsonModule": true,
+    "rootDir": ".",
+    "sourceMap": true,
+    "strict": true,
+    "target": "es2020",
+    "types": ["node"]
+  },
+  "include": [],
+  "references": [
+    { "path": "packages/graph" },
+    { "path": "packages/invoke" },
+    { "path": "packages/logger" },
+    { "path": "packages/message-bus" },
+    { "path": "packages/plugin-manager" },
+    { "path": "packages/query-params" },
+    { "path": "packages/store" },
+    { "path": "packages/store-logger" },
+    { "path": "packages/streams" },
+    { "path": "packages/test" },
+    { "path": "packages/vendor-plugin-manager" }
+  ]
 }

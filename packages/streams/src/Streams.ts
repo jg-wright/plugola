@@ -1,15 +1,16 @@
 import { AbortError, defer } from '@johngw/async'
+import { ForkableRecallStream } from '@johngw/stream/sinks/ForkableRecallStream'
+import { ForkableReplayStream } from '@johngw/stream/sinks/ForkableReplayStream'
+import { Controllable } from '@johngw/stream/sources/Controllable'
+import { Subject } from '@johngw/stream/subjects/Subject'
+import { StatefulSubject } from '@johngw/stream/subjects/StatefulSubject'
 import {
-  Controllable,
-  ForkableRecallStream,
-  ForkableReplayStream,
-  interpose,
-  StatefulSubject,
   StateReducerInput,
   StateReducerOutput,
   StateReducers,
-  Subject,
-} from '@johngw/stream'
+} from '@johngw/stream/transformers/stateReducer'
+import { interpose } from '@johngw/stream/transformers/interpose'
+import { ReadableStreamReadResult } from 'node:stream/web'
 import { O } from 'ts-toolbelt'
 
 export type StreamDict = {

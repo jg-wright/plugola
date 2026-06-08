@@ -1,30 +1,65 @@
 {
   "folders": [
-    { "name": "✨ @plugola/mono-repo", "path": "." },
-    { "name": "🏗 @plugola/generator", "path": "packages/generator" },
-    { "name": "📦 @plugola/graph", "path": "packages/graph" },
-    { "name": "📦 @plugola/invoke", "path": "packages/invoke" },
-    { "name": "📦 @plugola/logger", "path": "packages/logger" },
-    { "name": "📦 @plugola/message-bus", "path": "packages/message-bus" },
-    { "name": "📦 @plugola/plugin-manager", "path": "packages/plugin-manager" },
-    { "name": "📦 @plugola/query-params", "path": "packages/query-params" },
-    { "name": "📦 @plugola/store", "path": "packages/store" },
-    { "name": "📦 @plugola/store-logger", "path": "packages/store-logger" },
-    { "name": "📦 @plugola/streams", "path": "packages/streams" },
-    { "name": "📦 @plugola/test", "path": "packages/test" },
+    {
+      "name": "✨ @plugola/mono-repo",
+      "path": ".",
+    },
+    {
+      "name": "📦 @plugola/graph",
+      "path": "packages/graph",
+    },
+    {
+      "name": "📦 @plugola/invoke",
+      "path": "packages/invoke",
+    },
+    {
+      "name": "📦 @plugola/logger",
+      "path": "packages/logger",
+    },
+    {
+      "name": "📦 @plugola/message-bus",
+      "path": "packages/message-bus",
+    },
+    {
+      "name": "📦 @plugola/plugin-manager",
+      "path": "packages/plugin-manager",
+    },
+    {
+      "name": "📦 @plugola/query-params",
+      "path": "packages/query-params",
+    },
+    {
+      "name": "📦 @plugola/store",
+      "path": "packages/store",
+    },
+    {
+      "name": "📦 @plugola/store-logger",
+      "path": "packages/store-logger",
+    },
+    {
+      "name": "📦 @plugola/streams",
+      "path": "packages/streams",
+    },
+    {
+      "name": "📦 @plugola/test",
+      "path": "packages/test",
+    },
     {
       "name": "📦 @plugola/vendor-plugin-manager",
-      "path": "packages/vendor-plugin-manager"
+      "path": "packages/vendor-plugin-manager",
     },
-    { "name": "🤖 github", "path": ".github" }
+    {
+      "name": "🤖 github",
+      "path": ".github",
+    },
   ],
   "settings": {
     "search.exclude": { "**/dist": true, "**/.pnp.*": true, "**/.yarn": true },
     "prettier.prettierPath": "../../.yarn/sdks/prettier/index.js",
-    "typescript.tsdk": "✨ @plugola/mono-repo/.yarn/sdks/typescript/lib",
-    "typescript.enablePromptUseWorkspaceTsdk": true
+    "js/ts.tsdk.path": "✨ @plugola/mono-repo/.yarn/sdks/typescript/lib",
+    "js/ts.tsdk.promptToUseWorkspaceVersion": true,
   },
   "extensions": {
-    "recommendations": ["arcanis.vscode-zipfs", "esbenp.prettier-vscode"]
-  }
+    "recommendations": ["arcanis.vscode-zipfs", "esbenp.prettier-vscode"],
+  },
 }
