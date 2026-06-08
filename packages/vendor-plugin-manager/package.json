@@ -1,6 +1,6 @@
 {
   "name": "@plugola/vendor-plugin-manager",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "description": "A drop-in replacement for the plugin manager that handles CMP vendors",
   "type": "module",
   "exports": {
