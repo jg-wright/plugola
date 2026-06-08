@@ -14,12 +14,12 @@
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/jg-wright/ts-mono-repo/issues"
+    "url": "https://github.com/jg-wright/plugola/issues"
   },
   "repository": {
     "url": "https://github.com/jg-wright/plugola"
   },
-  "homepage": "https://github.com/jg-wright/ts-mono-repo#readme",
+  "homepage": "https://github.com/jg-wright/plugola#readme",
   "devDependencies": {
     "@plugola/invoke": "2.0.2",
     "@plugola/plugin-manager": "8.0.2",

@@ -20,12 +20,12 @@
   "author": "",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/jg-wright/ts-mono-repo/issues"
+    "url": "https://github.com/jg-wright/plugola/issues"
   },
   "repository": {
     "url": "https://github.com/jg-wright/plugola"
   },
-  "homepage": "https://github.com/jg-wright/ts-mono-repo#readme",
+  "homepage": "https://github.com/jg-wright/plugola#readme",
   "devDependencies": {
     "@types/node": "25.9.2",
     "@vitest/runner": "4.1.8",

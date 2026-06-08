@@ -19,8 +19,8 @@ jobs:
       releases_created: ${{ steps.release-please.outputs.releases_created }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@v3
-        id: app-token
+      - id: app-token
+        uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PEM }}
