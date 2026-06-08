@@ -1,6 +1,6 @@
 {
   "name": "@plugola/vendor-plugin-manager",
-  "version": "4.0.3",
+  "version": "4.0.2",
   "description": "A drop-in replacement for the plugin manager that handles CMP vendors",
   "type": "module",
   "exports": {
@@ -15,6 +15,9 @@
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/jg-wright/plugola/issues"
+  },
+  "repository": {
+    "url": "https://github.com/jg-wright/plugola"
   },
   "homepage": "https://github.com/jg-wright/plugola#readme",
   "devDependencies": {

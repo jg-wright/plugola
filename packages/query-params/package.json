@@ -1,6 +1,6 @@
 {
   "name": "@plugola/query-params",
-  "version": "3.0.2",
+  "version": "3.0.1",
   "description": "Parses location query parameters",
   "type": "module",
   "exports": {
@@ -18,6 +18,9 @@
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/jg-wright/ts-mono-repo/issues"
+  },
+  "repository": {
+    "url": "https://github.com/jg-wright/plugola"
   },
   "homepage": "https://github.com/jg-wright/ts-mono-repo#readme",
   "devDependencies": {

@@ -1,6 +1,6 @@
 {
   "name": "@plugola/invoke",
-  "version": "2.0.2",
+  "version": "2.0.1",
   "description": "Add ability to invoke functions across plugins",
   "type": "module",
   "exports": {
@@ -15,6 +15,9 @@
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/jg-wright/ts-mono-repo/issues"
+  },
+  "repository": {
+    "url": "https://github.com/jg-wright/plugola"
   },
   "homepage": "https://github.com/jg-wright/ts-mono-repo#readme",
   "devDependencies": {

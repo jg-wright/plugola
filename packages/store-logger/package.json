@@ -1,6 +1,6 @@
 {
   "name": "@plugola/store-logger",
-  "version": "3.0.2",
+  "version": "3.0.1",
   "description": "Logger/debugger for the store",
   "type": "module",
   "exports": {
@@ -15,6 +15,9 @@
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/jg-wright/plugola/issues"
+  },
+  "repository": {
+    "url": "https://github.com/jg-wright/plugola"
   },
   "homepage": "https://github.com/jg-wright/plugola#readme",
   "devDependencies": {
