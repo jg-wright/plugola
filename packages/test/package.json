@@ -1,6 +1,6 @@
 {
   "name": "@plugola/test",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Test plugola plugins",
   "type": "module",
   "exports": {
