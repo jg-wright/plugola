@@ -14,9 +14,9 @@
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/johngeorgewright/plugola/issues"
+    "url": "https://github.com/jg-wright/plugola/issues"
   },
-  "homepage": "https://github.com/johngeorgewright/plugola#readme",
+  "homepage": "https://github.com/jg-wright/plugola#readme",
   "devDependencies": {
     "@plugola/plugin-manager": "8.0.1",
     "@types/node": "25.9.2",

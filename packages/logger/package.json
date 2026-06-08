@@ -20,9 +20,9 @@
   "author": "",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/johngeorgewright/ts-mono-repo/issues"
+    "url": "https://github.com/jg-wright/ts-mono-repo/issues"
   },
-  "homepage": "https://github.com/johngeorgewright/ts-mono-repo#readme",
+  "homepage": "https://github.com/jg-wright/ts-mono-repo#readme",
   "devDependencies": {
     "@types/node": "25.9.2",
     "@vitest/runner": "4.1.8",
