@@ -18,8 +18,8 @@
   },
   "homepage": "https://github.com/johngeorgewright/ts-mono-repo#readme",
   "devDependencies": {
-    "@plugola/invoke": "workspace:^",
-    "@plugola/plugin-manager": "workspace:^",
+    "@plugola/invoke": "2.0.1",
+    "@plugola/plugin-manager": "8.0.1",
     "@types/node": "25.9.2",
     "@vitest/runner": "4.1.8",
     "rimraf": "6.1.3",

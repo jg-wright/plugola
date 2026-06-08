@@ -55,8 +55,6 @@
   ],
   "settings": {
     "search.exclude": { "**/dist": true, "**/.pnp.*": true, "**/.yarn": true },
-    "prettier.prettierPath": "../../.yarn/sdks/prettier/index.js",
-    "js/ts.tsdk.path": "✨ @plugola/mono-repo/.yarn/sdks/typescript/lib",
     "js/ts.tsdk.promptToUseWorkspaceVersion": true,
   },
   "extensions": {

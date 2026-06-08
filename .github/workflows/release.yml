@@ -32,15 +32,16 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
+          cache: npm
           node-version-file: .nvmrc
-      - run: yarn install --immutable
-      - run: yarn build
+      - run: npm ci
+      - run: npm run build
       - env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: | # shell
           echo '${{ needs.release-github.outputs.paths }}' | jq -r '.[]' | while read -r path
           do
             cd $path
-            yarn npm publish
+            npm publish
             cd -
           done
