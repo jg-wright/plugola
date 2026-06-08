@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.0.2](https://github.com/jg-wright/plugola/compare/store-v8.0.1...store-v8.0.2) (2026-06-08)
+
+### Bug Fixes
+
+- correct repo urls ([6b5345b](https://github.com/jg-wright/plugola/commit/6b5345b15e5dece5cdbc9e73730de443f535ac6c))
+- upgrade all dependencies ([6e0d045](https://github.com/jg-wright/plugola/commit/6e0d0453251e8096e2dbc1bbafe9c4b16919a0ca))
+
 ## [8.0.1](https://github.com/jg-wright/plugola/compare/store-v8.0.0...store-v8.0.1) (2026-03-23)
 
 ### Bug Fixes
