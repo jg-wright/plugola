@@ -5,12 +5,11 @@ on:
 
 concurrency:
   cancel-in-progress: true
-  group: ${{ github.ref }}
+  group: pr-${{ github.event.pull_request.number }}
 
 jobs:
   test:
     if: ${{ !contains(github.head_ref, 'release-please-') }}
-    name: Test
     runs-on: ubuntu-latest
 
     strategy:

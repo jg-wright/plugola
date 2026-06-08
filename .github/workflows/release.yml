@@ -23,35 +23,6 @@ jobs:
       - id: release-please
         uses: googleapis/release-please-action@v4
 
-  release-update-lockfile:
-    needs: release-github
-    if: needs.release-github.outputs.pr
-    runs-on: dmg-arc-ubuntu
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ fromJson(needs.release-github.outputs.pr).headBranchName }}
-          persist-credentials: false
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-      - uses: ./.github/actions/setup-git
-      - run: yarn --no-immutable
-      - id: yarn-lock-changes
-        run: | # shell
-          if git diff --quiet yarn.lock; then
-            echo "No lockfile changes"
-          else
-            echo "Detected lockfile changes"
-            echo "changes=true" >> $GITHUB_TOKEN
-            git add yarn.lock .pnp.cjs .yarn
-            git commit -m "chore: update lockfile"
-          fi
-      - if: steps.yarn-lock-changes.outputs.changes == 'true'
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.PUSH_TOKEN }}
-
   npm:
     needs: release-github
     if: needs.release-github.outputs.releases_created == 'true'
