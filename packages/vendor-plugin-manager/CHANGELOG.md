@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.0.4](https://github.com/jg-wright/plugola/compare/vendor-plugin-manager-v4.0.3...vendor-plugin-manager-v4.0.4) (2026-06-08)
+
+
+### Bug Fixes
+
+* add dist to package ([64710ee](https://github.com/jg-wright/plugola/commit/64710ee56ed534118ab71d51b1b276fbe85b9d52))
+* update build and clean scripts across multiple packages ([e29e435](https://github.com/jg-wright/plugola/commit/e29e435c6dec7d31c33f7e454ceb9b38bf0ccd06))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/plugin-manager bumped from 8.0.4 to 9.0.0
+  * peerDependencies
+    * @plugola/plugin-manager bumped from ^8.0.4 to ^9.0.0
+
 ## [4.0.3](https://github.com/jg-wright/plugola/compare/vendor-plugin-manager-v4.0.2...vendor-plugin-manager-v4.0.3) (2026-06-08)
 
 

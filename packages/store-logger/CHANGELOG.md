@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.0.3](https://github.com/jg-wright/plugola/compare/store-logger-v3.0.2...store-logger-v3.0.3) (2026-06-08)
+
+
+### Bug Fixes
+
+* add dist to package ([64710ee](https://github.com/jg-wright/plugola/commit/64710ee56ed534118ab71d51b1b276fbe85b9d52))
+* update build and clean scripts across multiple packages ([e29e435](https://github.com/jg-wright/plugola/commit/e29e435c6dec7d31c33f7e454ceb9b38bf0ccd06))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/logger bumped from 5.0.2 to 5.0.3
+    * @plugola/store bumped from 8.0.2 to 8.0.3
+  * peerDependencies
+    * @plugola/logger bumped from ^5.0.2 to ^5.0.3
+    * @plugola/store bumped from ^8.0.2 to ^8.0.3
+
 ## [3.0.2](https://github.com/jg-wright/plugola/compare/store-logger-v3.0.1...store-logger-v3.0.2) (2026-06-08)
 
 
