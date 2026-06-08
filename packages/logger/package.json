@@ -12,8 +12,8 @@
   },
   "sideEffects": false,
   "scripts": {
-    "build": "yarn clean && tsc",
-    "clean": "rimraf dist && rimraf tsconfig.tsbuildinfo",
+    "build": "tsc --build",
+    "clean": "tsc --build --clean && rimraf dist",
     "start": "tsc --watch --preserveWatchOutput",
     "test": "vitest --run"
   },

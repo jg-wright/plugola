@@ -1,15 +1,15 @@
 import { updateMap } from '@johngw/map'
 import {
   PluginManager,
-  EnableContext,
-  Plugin,
-  RunContext,
+  type EnableContext,
+  type Plugin,
+  type RunContext,
 } from '@plugola/plugin-manager'
 
 export default class VendorPluginManager<
   ExtraContext extends Record<string, unknown>,
   ExtraEnableContext extends Record<string, unknown>,
-  ExtraRunContext extends Record<string, unknown>
+  ExtraRunContext extends Record<string, unknown>,
 > extends PluginManager<ExtraContext, ExtraEnableContext, ExtraRunContext> {
   #automaticallyAuthorizedPlugins = new Set<string>()
   #vendors: Map<number, string[]> = new Map()
@@ -18,7 +18,7 @@ export default class VendorPluginManager<
     plugin: Plugin<
       EnableContext & ExtraContext & ExtraEnableContext,
       RunContext & ExtraContext & ExtraRunContext
-    >
+    >,
   ): void
 
   override registerPlugin(
@@ -29,7 +29,7 @@ export default class VendorPluginManager<
         RunContext & ExtraContext & ExtraRunContext
       >,
       'name'
-    >
+    >,
   ): void
 
   override registerPlugin(
@@ -45,7 +45,7 @@ export default class VendorPluginManager<
         RunContext & ExtraContext & ExtraRunContext
       >,
       'name'
-    >
+    >,
   ) {
     super.registerPlugin(
       nameOrPlugin as string,
@@ -55,7 +55,7 @@ export default class VendorPluginManager<
           RunContext & ExtraContext & ExtraRunContext
         >,
         'name'
-      >
+      >,
     )
 
     const name = plugin
@@ -79,7 +79,7 @@ export default class VendorPluginManager<
         RunContext & ExtraContext & ExtraRunContext
       >,
       'name'
-    >
+    >,
   ) {
     super.registerPlugin(name, plugin)
     this.#relatedPluginAndVendorIds(name, vendorIds)
@@ -93,7 +93,7 @@ export default class VendorPluginManager<
           this.#vendors.has(vendorId)
             ? [...pluginNames, ...this.#vendors.get(vendorId)!]
             : pluginNames,
-        []
+        [],
       ),
     ])
   }

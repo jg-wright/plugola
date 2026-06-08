@@ -1,10 +1,10 @@
-import { Plugin } from '@plugola/plugin-manager'
+import type { Plugin } from '@plugola/plugin-manager'
 
 export interface TestPlugin<
   TestContext extends Record<string, unknown>,
   PluginContext extends Record<string, unknown>,
   EnableContext extends Record<string, unknown>,
-  RunContext extends Record<string, unknown>
+  RunContext extends Record<string, unknown>,
 > {
   afterRun?(testContext: TestContext): any
   enableContext?(pluginName: string): EnableContext
