@@ -5,32 +5,23 @@ on:
 
 concurrency:
   cancel-in-progress: true
-  group: ${{ github.ref }}
+  group: pr-${{ github.event.pull_request.number }}
 
 jobs:
   test:
     if: ${{ !contains(github.head_ref, 'release-please-') }}
-    name: Test
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        node-version: [22, 24]
+        node-version: [24, 26]
 
     steps:
-      - name: Checkout project
-        uses: actions/checkout@v6
-
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
+          cache: npm
           node-version: ${{ matrix.node-version }}
-
-      - name: Yarn
-        run: yarn install --immutable
-
-      - name: Build
-        run: yarn build
-
-      - name: Test
-        run: yarn test
+      - run: npm ci
+      - run: npm run build
+      - run: npm  test
