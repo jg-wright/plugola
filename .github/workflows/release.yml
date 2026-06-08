@@ -17,7 +17,6 @@ jobs:
     outputs:
       paths: ${{ steps.release-please.outputs.paths_released }}
       releases_created: ${{ steps.release-please.outputs.releases_created }}
-      pr: ${{ steps.release-please.outputs.pr }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/create-github-app-token@v3
@@ -29,7 +28,7 @@ jobs:
           permission-issues: write
           permission-pull-requests: write
       - id: release-please
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           token: ${{ steps.app-token.outputs.token }}
 
@@ -38,6 +37,12 @@ jobs:
     if: needs.release-github.outputs.releases_created == 'true'
     runs-on: ubuntu-latest
     environment: npm
+    strategy:
+      matrix:
+        path: ${{ fromJson(needs.release-github.outputs.paths) }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -46,12 +51,5 @@ jobs:
           node-version-file: .nvmrc
       - run: npm ci
       - run: npm run build
-      - env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: | # shell
-          echo '${{ needs.release-github.outputs.paths }}' | jq -r '.[]' | while read -r path
-          do
-            cd $path
-            npm publish
-            cd -
-          done
+      - working-directory: ${{ matrix.path }}
+        run: npm publish
