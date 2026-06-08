@@ -1,6 +1,6 @@
 {
   "name": "@plugola/plugin-manager",
-  "version": "8.0.2",
+  "version": "8.0.3",
   "description": "Plugin system",
   "type": "module",
   "exports": {
@@ -19,7 +19,7 @@
     "url": "https://github.com/jg-wright/ts-mono-repo/issues"
   },
   "repository": {
-    "url": "https://github.com/jg-wright/plugola"
+    "url": "git+https://github.com/jg-wright/plugola.git"
   },
   "homepage": "https://github.com/jg-wright/ts-mono-repo#readme",
   "devDependencies": {

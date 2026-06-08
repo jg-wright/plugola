@@ -3,7 +3,7 @@
   "packages/invoke": "2.0.2",
   "packages/logger": "5.0.2",
   "packages/message-bus": "6.0.2",
-  "packages/plugin-manager": "8.0.2",
+  "packages/plugin-manager": "8.0.3",
   "packages/query-params": "3.0.2",
   "packages/store": "8.0.2",
   "packages/store-logger": "3.0.2",
