@@ -1,6 +1,6 @@
 import set from 'lodash.set'
 import { expect, test } from 'vitest'
-import parseQueryParams from '../src/parseQueryParams.js'
+import parseQueryParams from '@plugola/query-params/parse'
 
 test('strings', () => {
   expect(parseQueryParams('?foo=bar&mung=face')).toEqual({
@@ -34,7 +34,7 @@ test('prepending arrays', () => {
     foo: ['bar', 'mung'],
   })
   expect(
-    parseQueryParams('foo[^]=bar,mung', { into: { foo: ['foo'] } })
+    parseQueryParams('foo[^]=bar,mung', { into: { foo: ['foo'] } }),
   ).toEqual({
     foo: ['bar', 'mung', 'foo'],
   })
@@ -78,7 +78,7 @@ test('filter into', () => {
       amendKey: (key) => key.slice(3),
       into: { version: 1 },
       filter: (key) => key.startsWith('ac.'),
-    })
+    }),
   ).toEqual({
     foo: 'bar',
     version: 1,
