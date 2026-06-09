@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.3](https://github.com/jg-wright/plugola/compare/streams-v2.0.2...streams-v2.0.3) (2026-06-08)
+
+
+### Bug Fixes
+
+* add dist to package ([64710ee](https://github.com/jg-wright/plugola/commit/64710ee56ed534118ab71d51b1b276fbe85b9d52))
+* update build and clean scripts across multiple packages ([e29e435](https://github.com/jg-wright/plugola/commit/e29e435c6dec7d31c33f7e454ceb9b38bf0ccd06))
+
 ## [2.0.2](https://github.com/jg-wright/plugola/compare/streams-v2.0.1...streams-v2.0.2) (2026-06-08)
 
 
