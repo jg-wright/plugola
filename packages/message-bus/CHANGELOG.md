@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.0.4](https://github.com/jg-wright/plugola/compare/message-bus-v6.0.3...message-bus-v6.0.4) (2026-06-09)
+
+
+### Bug Fixes
+
+* **message-bus:** export types ([3353ab3](https://github.com/jg-wright/plugola/commit/3353ab3f224769648974eb568896bb14706f4b12))
+
 ## [6.0.3](https://github.com/jg-wright/plugola/compare/message-bus-v6.0.2...message-bus-v6.0.3) (2026-06-08)
 
 
