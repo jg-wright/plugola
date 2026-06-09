@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.4](https://github.com/jg-wright/plugola/compare/query-params-v3.0.3...query-params-v3.0.4) (2026-06-09)
+
+
+### Bug Fixes
+
+* **query-params:** make sure dist exists ([fee9721](https://github.com/jg-wright/plugola/commit/fee9721ba9fc51eeecf14beb79132bc60125ece0))
+
 ## [3.0.3](https://github.com/jg-wright/plugola/compare/query-params-v3.0.2...query-params-v3.0.3) (2026-06-08)
 
 
