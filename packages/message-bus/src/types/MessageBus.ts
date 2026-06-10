@@ -33,23 +33,8 @@ export interface MessageBusContext {
  * type Ctx = CreateMessageBusContext<{ events: { foo: [string] } }>
  * let bus: MessageBus<Ctx>
  */
-export type CreateMessageBusContext<C extends Partial<MessageBusContext>> =
+export type CreateMessageBusContext<C extends Partial<MessageBusContext> = {}> =
   Omit<MessageBusContext, keyof C> & C
-
-export type MessageBusEvents<MB extends MessageBus> =
-  MB extends MessageBus<infer $> ? $['events'] : never
-
-export type MessageBusEventGenerators<MB extends MessageBus> =
-  MB extends MessageBus<infer $> ? $['generators'] : never
-
-export type MessageBusInvokers<MB extends MessageBus> =
-  MB extends MessageBus<infer $> ? $['invokables'] : never
-
-export type MessageBusStreams<MB extends MessageBus> =
-  MB extends MessageBus<infer $> ? $['streams'] : never
-
-export type MessageBusBroker<MB extends MessageBus> =
-  MB extends MessageBus<infer $> ? Broker<$> : never
 
 export interface ErrorHandler {
   (error: MessageBusError): any
