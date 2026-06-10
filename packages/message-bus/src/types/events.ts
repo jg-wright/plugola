@@ -1,7 +1,7 @@
 import type { L } from 'ts-toolbelt'
 import type Broker from '../Broker.js'
 import type { CancelEvent } from '../symbols.js'
-import type { AddAbortSignal } from './MessageBus.js'
+import type { AddAbortSignal, MessageBusContext } from './MessageBus.js'
 
 export type EventsT = Record<string, unknown[]>
 
@@ -29,14 +29,15 @@ export type SubscriberArgs<A extends unknown[]> = _SubscriberArgs<
 type _SubscriberArgs<
   A extends unknown[],
   B extends unknown[],
-  Acc extends unknown[]
-> = L.Length<A> extends 0
-  ? Acc
-  : _SubscriberArgs<
-      L.Pop<A>,
-      L.Prepend<B, L.Last<A>>,
-      L.Append<A, SubscriberFn<B>> | Acc
-    >
+  Acc extends unknown[],
+> =
+  L.Length<A> extends 0
+    ? Acc
+    : _SubscriberArgs<
+        L.Pop<A>,
+        L.Prepend<B, L.Last<A>>,
+        L.Append<A, SubscriberFn<B>> | Acc
+      >
 
 /**
  * Create an `.until` argument union from a list of types.
@@ -49,10 +50,8 @@ type _SubscriberArgs<
  */
 export type UntilArgs<A extends unknown[]> = _UntilArgs<A, A>
 
-type _UntilArgs<
-  A extends unknown[],
-  Acc extends unknown[]
-> = L.Length<A> extends 0 ? Acc : _UntilArgs<L.Pop<A>, L.Pop<A> | Acc>
+type _UntilArgs<A extends unknown[], Acc extends unknown[]> =
+  L.Length<A> extends 0 ? Acc : _UntilArgs<L.Pop<A>, L.Pop<A> | Acc>
 
 /**
  * The return value of `.until` from given arguments and
@@ -68,28 +67,26 @@ type _UntilArgs<
  * type Rtn = UntilRtn<[string, number, string], [string, number, string]>
  * // []
  */
-export type UntilRtn<
-  T extends unknown[],
-  Args extends unknown[]
-> = L.Length<Args> extends 0
-  ? T
-  : L.Head<T> extends L.Head<Args>
-  ? UntilRtn<L.Tail<T>, L.Tail<Args>>
-  : never
+export type UntilRtn<T extends unknown[], Args extends unknown[]> =
+  L.Length<Args> extends 0
+    ? T
+    : L.Head<T> extends L.Head<Args>
+      ? UntilRtn<L.Tail<T>, L.Tail<Args>>
+      : never
 
-export type Subscribers<Events extends EventsT> = Partial<{
-  [EventName in keyof Events]: Subscriber<Broker>[]
+export type Subscribers<$ extends MessageBusContext> = Partial<{
+  [EventName in keyof $['events']]: Subscriber<$>[]
 }>
 
-export interface Subscriber<B extends Broker> {
-  broker: B
+export interface Subscriber<$ extends MessageBusContext> {
+  broker: Broker<$>
   args: unknown[]
   fn: SubscriberFn<unknown[]>
 }
 
 export type EventInterceptorFn<
   Args extends unknown[],
-  NewArgs extends unknown[]
+  NewArgs extends unknown[],
 > = (
   ...args: Args
 ) =>
@@ -109,22 +106,23 @@ type _EventInterceptorArgs<
   A extends unknown[],
   B extends unknown[],
   C extends unknown[],
-  Acc extends unknown[]
-> = L.Length<A> extends 0
-  ? Acc
-  : _EventInterceptorArgs<
-      L.Pop<A>,
-      L.Prepend<B, L.Last<A>>,
-      C,
-      Acc | [...A, EventInterceptorFn<B, C>]
-    >
+  Acc extends unknown[],
+> =
+  L.Length<A> extends 0
+    ? Acc
+    : _EventInterceptorArgs<
+        L.Pop<A>,
+        L.Prepend<B, L.Last<A>>,
+        C,
+        Acc | [...A, EventInterceptorFn<B, C>]
+      >
 
-export type EventInterceptors<Events extends EventsT> = Partial<{
-  [EventName in keyof Events]: EventInterceptor<Broker>[]
+export type EventInterceptors<$ extends MessageBusContext> = Partial<{
+  [EventName in keyof $['events']]: EventInterceptor<$>[]
 }>
 
-export interface EventInterceptor<B extends Broker> {
-  broker: B
+export interface EventInterceptor<$ extends MessageBusContext> {
+  broker: Broker<$>
   args: unknown[]
   fn: EventInterceptorFn<unknown[], unknown[]>
 }

@@ -1,29 +1,26 @@
-import { InvokablesDict, InvokerRegistrationArgs } from '@plugola/invoke'
+import { InvokerRegistrationArgs } from '@plugola/invoke'
 import type MessageBus from './MessageBus.js'
 import SubscriptionDisposer from './SubscriptionDisposer.js'
 import type {
   EventInterceptorArgs,
-  EventsT,
   SubscriberArgs,
   UntilArgs,
   UntilRtn,
 } from './types/events.js'
-import type {
-  EventGeneratorArgs,
-  EventGeneratorsT,
-} from './types/generators.js'
+import type { EventGeneratorArgs } from './types/generators.js'
 import type { InvokerInterceptorArgs } from './types/invokables.js'
-import { ErrorHandler, Unsubscriber } from './types/MessageBus.js'
+import {
+  ErrorHandler,
+  MessageBusContext,
+  Unsubscriber,
+} from './types/MessageBus.js'
+import { StreamReaderArgs } from './types/streams.js'
 
-export default class Broker<
-  Events extends EventsT = EventsT,
-  EventGens extends EventGeneratorsT = EventGeneratorsT,
-  Invokables extends InvokablesDict = InvokablesDict
-> {
+export default class Broker<$ extends MessageBusContext = MessageBusContext> {
   constructor(
-    messageBus: MessageBus<Events, EventGens, Invokables>,
+    messageBus: MessageBus<$>,
     id: string,
-    abortController: AbortController
+    abortController: AbortController,
   ) {
     this.#abortController = abortController
     this.#id = id
@@ -40,7 +37,7 @@ export default class Broker<
     return this.abortSignal.aborted
   }
 
-  get abortSignal() {
+  get abortSignal(): AbortSignal {
     return this.#abortController.signal
   }
 
@@ -54,7 +51,7 @@ export default class Broker<
     return this.#id
   }
 
-  readonly #messageBus: MessageBus<Events, EventGens, Invokables>
+  readonly #messageBus: MessageBus<$>
   get messageBus() {
     return this.#messageBus
   }
@@ -75,147 +72,164 @@ export default class Broker<
     })
   }
 
-  emit<EventName extends keyof Events>(
+  emit<EventName extends keyof $['events']>(
     eventName: EventName,
-    ...args: Events[EventName]
+    ...args: $['events'][EventName]
   ): void | Promise<void> {
     return this.#messageBus.emit(this, eventName, args)
   }
 
-  emitSignal<EventName extends keyof Events>(
+  emitSignal<EventName extends keyof $['events']>(
     eventName: EventName,
     signal: AbortSignal,
-    ...args: Events[EventName]
+    ...args: $['events'][EventName]
   ): void | Promise<void> {
     return this.#messageBus.emit(this, eventName, args, signal)
   }
 
-  interceptEvent<EventName extends keyof Events>(
+  interceptEvent<EventName extends keyof $['events']>(
     eventName: EventName,
-    ...args: EventInterceptorArgs<Events[EventName]>
+    ...args: EventInterceptorArgs<$['events'][EventName]>
   ): Unsubscriber {
     return this.#messageBus.interceptEvent(this as any, eventName, args)
   }
 
-  on<EventName extends keyof Events>(
+  on<EventName extends keyof $['events']>(
     eventName: EventName,
-    ...args: SubscriberArgs<Events[EventName]>
+    ...args: SubscriberArgs<$['events'][EventName]>
   ): Unsubscriber {
     return this.#messageBus.on(this, eventName, args)
   }
 
-  once<EventName extends keyof Events>(
+  once<EventName extends keyof $['events']>(
     eventName: EventName,
-    ...args: SubscriberArgs<Events[EventName]>
+    ...args: SubscriberArgs<$['events'][EventName]>
   ): Unsubscriber {
     return this.#messageBus.once(this, eventName, args)
   }
 
-  hasSubscriber(eventName: keyof Events) {
+  hasSubscriber(eventName: keyof $['events']) {
     return this.#messageBus.hasSubscriber(eventName)
   }
 
   async until<
-    EventName extends keyof Events,
-    Args extends UntilArgs<Events[EventName]>
+    EventName extends keyof $['events'],
+    Args extends UntilArgs<$['events'][EventName]>,
   >(
     eventName: EventName,
     ...args: Args
-  ): Promise<UntilRtn<Events[EventName], Args>> {
+  ): Promise<UntilRtn<$['events'][EventName], Args>> {
     return this.#messageBus.until(this, eventName, args) as any
   }
 
   async untilSignal<
-    EventName extends keyof Events,
-    Args extends UntilArgs<Events[EventName]>
+    EventName extends keyof $['events'],
+    Args extends UntilArgs<$['events'][EventName]>,
   >(
     eventName: EventName,
     abortSignal: AbortSignal,
     ...args: Args
-  ): Promise<UntilRtn<Events[EventName], Args>> {
+  ): Promise<UntilRtn<$['events'][EventName], Args>> {
     return this.#messageBus.until(this, eventName, args, abortSignal) as any
   }
 
-  generator<EventName extends keyof EventGens>(
+  generator<EventName extends keyof $['generators']>(
     eventName: EventName,
     ...args: EventGeneratorArgs<
-      EventGens[EventName]['args'],
-      EventGens[EventName]['yield']
+      $['generators'][EventName]['args'],
+      $['generators'][EventName]['yield']
     >
   ): Unsubscriber {
     return this.#messageBus.generator(this, eventName, args)
   }
 
-  iterate<EventName extends keyof EventGens>(
+  iterate<EventName extends keyof $['generators']>(
     eventName: EventName,
-    ...args: EventGens[EventName]['args']
-  ): AsyncIterable<EventGens[EventName]['yield']> {
+    ...args: $['generators'][EventName]['args']
+  ): AsyncIterable<$['generators'][EventName]['yield']> {
     return this.#messageBus.iterate(this, eventName, args)
   }
 
-  iterateSignal<EventName extends keyof EventGens>(
+  iterateSignal<EventName extends keyof $['generators']>(
     eventName: EventName,
     abortSignal: AbortSignal,
-    ...args: EventGens[EventName]['args']
-  ): AsyncIterable<EventGens[EventName]['yield']> {
+    ...args: $['generators'][EventName]['args']
+  ): AsyncIterable<$['generators'][EventName]['yield']> {
     return this.#messageBus.iterate(this, eventName, args, abortSignal)
   }
 
-  iterateWithin<EventName extends keyof EventGens>(
+  iterateWithin<EventName extends keyof $['generators']>(
     within: number,
     eventName: EventName,
-    ...args: EventGens[EventName]['args']
-  ): AsyncIterable<EventGens[EventName]['yield']> {
+    ...args: $['generators'][EventName]['args']
+  ): AsyncIterable<$['generators'][EventName]['yield']> {
     return this.#messageBus.iterateWithin(this, within, eventName, args)
   }
 
-  accumulate<EventName extends keyof EventGens>(
+  accumulate<EventName extends keyof $['generators']>(
     eventName: EventName,
-    ...args: EventGens[EventName]['args']
-  ): Promise<EventGens[EventName]['yield'][]> {
+    ...args: $['generators'][EventName]['args']
+  ): Promise<$['generators'][EventName]['yield'][]> {
     return this.#messageBus.accumulate(this, eventName, args)
   }
 
-  accumulateWithin<EventName extends keyof EventGens>(
+  accumulateWithin<EventName extends keyof $['generators']>(
     within: number,
     eventName: EventName,
-    ...args: EventGens[EventName]['args']
-  ): Promise<EventGens[EventName]['yield'][]> {
+    ...args: $['generators'][EventName]['args']
+  ): Promise<$['generators'][EventName]['yield'][]> {
     return this.#messageBus.accumulateWithin(this, within, eventName, args)
   }
 
-  register<InvokableName extends keyof Invokables>(
+  register<InvokableName extends keyof $['invokables']>(
     invokableName: InvokableName,
     ...args: InvokerRegistrationArgs<
-      Invokables[InvokableName]['args'],
-      Invokables[InvokableName]['return']
+      $['invokables'][InvokableName]['args'],
+      $['invokables'][InvokableName]['return']
     >
   ): Unsubscriber {
     return this.#messageBus.register(this, invokableName, args)
   }
 
-  invoke<InvokableName extends keyof Invokables>(
+  invoke<InvokableName extends keyof $['invokables']>(
     invokableName: InvokableName,
-    ...args: Invokables[InvokableName]['args']
-  ): Promise<Invokables[InvokableName]['return']> {
+    ...args: $['invokables'][InvokableName]['args']
+  ): Promise<$['invokables'][InvokableName]['return']> {
     return this.#messageBus.invoke(this, invokableName, args)
   }
 
-  invokeSignal<InvokableName extends keyof Invokables>(
+  invokeSignal<InvokableName extends keyof $['invokables']>(
     invokableName: InvokableName,
     abortSignal: AbortSignal,
-    ...args: Invokables[InvokableName]['args']
-  ): Promise<Invokables[InvokableName]['return']> {
+    ...args: $['invokables'][InvokableName]['args']
+  ): Promise<$['invokables'][InvokableName]['return']> {
     return this.#messageBus.invoke(this, invokableName, args, abortSignal)
   }
 
-  interceptInvoker<InvokableName extends keyof Invokables>(
+  interceptInvoker<InvokableName extends keyof $['invokables']>(
     invokableName: InvokableName,
     ...args: InvokerInterceptorArgs<
-      Invokables[InvokableName]['args'],
-      Invokables[InvokableName]['return']
+      $['invokables'][InvokableName]['args'],
+      $['invokables'][InvokableName]['return']
     >
   ): Unsubscriber {
     return this.#messageBus.interceptInvoker(this, invokableName, args)
+  }
+
+  reader<StreamName extends keyof $['streams']>(
+    streamName: StreamName,
+    ...args: StreamReaderArgs<
+      $['streams'][StreamName]['args'],
+      $['streams'][StreamName]['item']
+    >
+  ): Unsubscriber {
+    return this.#messageBus.reader(this, streamName, args)
+  }
+
+  stream<StreamName extends keyof $['streams']>(
+    streamName: StreamName,
+    ...args: $['streams'][StreamName]['args']
+  ): ReadableStream<$['streams'][StreamName]['item']> {
+    return this.#messageBus.stream(this, streamName, args)
   }
 }

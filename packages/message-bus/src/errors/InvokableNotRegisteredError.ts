@@ -1,20 +1,13 @@
-import { InvokablesDict } from '@plugola/invoke'
 import MessageBus from '../MessageBus.js'
-import { EventsT } from '../types/events.js'
-import { EventGeneratorsT } from '../types/generators.js'
+import { MessageBusContext } from '../types/MessageBus.js'
 
 export class InvokableNotRegisteredError<
-  Events extends EventsT,
-  EventGens extends EventGeneratorsT,
-  Invokables extends InvokablesDict
+  $ extends MessageBusContext = MessageBusContext,
 > extends Error {
-  #messageBus: MessageBus<Events, EventGens, Invokables>
+  #messageBus: MessageBus<$>
   #invokableName: string
 
-  constructor(
-    messageBus: MessageBus<Events, EventGens, Invokables>,
-    invokableName: string
-  ) {
+  constructor(messageBus: MessageBus<$>, invokableName: string) {
     super(`Cannot find matching invoker for "${invokableName}".`)
     this.#messageBus = messageBus
     this.#invokableName = invokableName
