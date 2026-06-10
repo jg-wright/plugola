@@ -23,6 +23,7 @@ import {
   InvokerInterceptorArgs,
   InvokerInterceptors,
   Invokers,
+  MatchableInvokerRegistrationArgs,
 } from './types/invokables.js'
 import { Stringable, UnpackResolvableValue } from './types/util.js'
 import {
@@ -33,7 +34,8 @@ import {
 } from './types/MessageBus.js'
 import { anySignal, fromSignal } from './AbortController.js'
 import { InvokableNotRegisteredError } from './errors/InvokableNotRegisteredError.js'
-import { InvokerFn, InvokerRegistrationArgs } from '@plugola/invoke'
+import { InvokerFn } from '@plugola/invoke'
+import { match } from './matcher.js'
 import { StreamReader, StreamReaderArgs, Streams } from './types/streams.js'
 import { WritableReadablePair } from '@johngw/stream/transformers/WritableReadablePair'
 import { mergeUnderlyingSource } from '@johngw/stream'
@@ -341,7 +343,7 @@ export default class MessageBus<
   register<InvokableName extends keyof $['invokables']>(
     broker: Broker<$>,
     invokableName: InvokableName,
-    allArgs: InvokerRegistrationArgs<
+    allArgs: MatchableInvokerRegistrationArgs<
       $['invokables'][InvokableName]['args'],
       $['invokables'][InvokableName]['return']
     >,
@@ -595,7 +597,7 @@ export default class MessageBus<
     else if (args1.length > args2.length) return -1
 
     let i = 0
-    for (; i < args1.length; i++) if (args1[i] !== args2[i]) return -1
+    for (; i < args1.length; i++) if (!match(args1[i], args2[i])) return -1
     return i
   }
 

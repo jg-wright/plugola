@@ -1,4 +1,5 @@
 import { L } from 'ts-toolbelt'
+import type { Matchable } from '../matcher.js'
 import Broker from '../Broker.js'
 import { AddAbortSignal, MessageBusContext } from './MessageBus.js'
 import { UnderlyingDefaultSource } from 'node:stream/web'
@@ -55,5 +56,5 @@ type _StreamReaderArgs<
         L.Pop<A>,
         Item,
         L.Prepend<B, L.Last<A>>,
-        L.Append<A, ReaderFn<B, Item>> | Acc
+        L.Append<Matchable<A>, ReaderFn<B, Item>> | Acc
       >

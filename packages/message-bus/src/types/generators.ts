@@ -1,4 +1,5 @@
 import type { L } from 'ts-toolbelt'
+import type { Matchable } from '../matcher.js'
 import type Broker from '../Broker.js'
 import type { AddAbortSignal, MessageBusContext } from './MessageBus.js'
 
@@ -38,7 +39,7 @@ export type _EventGeneratorArgs<
         L.Pop<A>,
         R,
         L.Prepend<B, L.Last<A>>,
-        Acc | L.Append<A, EventGeneratorFn<B, R>>
+        Acc | L.Append<Matchable<A>, EventGeneratorFn<B, R>>
       >
 
 export type EventGenerators<$ extends MessageBusContext> = Partial<{
