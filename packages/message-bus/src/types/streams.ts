@@ -1,6 +1,6 @@
 import { L } from 'ts-toolbelt'
 import Broker from '../Broker.js'
-import { AddAbortSignal } from './MessageBus.js'
+import { AddAbortSignal, MessageBusContext } from './MessageBus.js'
 import { UnderlyingDefaultSource } from 'node:stream/web'
 
 export type StreamsDict = Record<string, { args: unknown[]; item: unknown }>
@@ -11,17 +11,21 @@ export type ReaderFn<Args extends unknown[], I> = (
   ...args: AddAbortSignal<Args>
 ) => UnderlyingDefaultSource<I>
 
-export interface StreamReader<B extends Broker, Args extends unknown[], Item> {
-  broker: B
+export interface StreamReader<
+  $ extends MessageBusContext,
+  Args extends unknown[],
+  Item,
+> {
+  broker: Broker<$>
   args: Args
   fn: ReaderFn<Args, Item>
 }
 
-export type Streams<Streamables extends StreamsDict> = Partial<{
-  [StreamName in keyof Streamables]: StreamReader<
-    Broker,
-    Streamables[StreamName]['args'],
-    Streamables[StreamName]['item']
+export type Streams<$ extends MessageBusContext> = Partial<{
+  [StreamName in keyof $['streams']]: StreamReader<
+    $,
+    $['streams'][StreamName]['args'],
+    $['streams'][StreamName]['item']
   >[]
 }>
 

@@ -1,6 +1,6 @@
 import type { L } from 'ts-toolbelt'
 import type Broker from '../Broker.js'
-import type { AddAbortSignal } from './MessageBus.js'
+import type { AddAbortSignal, MessageBusContext } from './MessageBus.js'
 
 export type EventGeneratorsT = Record<
   string,
@@ -13,8 +13,8 @@ export type EventGeneratorFn<Args extends unknown[], R> = (
   ...args: AddAbortSignal<Args>
 ) => AsyncIterable<R>
 
-export interface EventGenerator<B extends Broker> {
-  broker: B
+export interface EventGenerator<$ extends MessageBusContext> {
+  broker: Broker<$>
   args: unknown[]
   fn: EventGeneratorFn<unknown[], unknown>
 }
@@ -30,16 +30,17 @@ export type _EventGeneratorArgs<
   A extends unknown[],
   R,
   B extends unknown[],
-  Acc extends unknown[]
-> = L.Length<A> extends 0
-  ? Acc
-  : _EventGeneratorArgs<
-      L.Pop<A>,
-      R,
-      L.Prepend<B, L.Last<A>>,
-      Acc | L.Append<A, EventGeneratorFn<B, R>>
-    >
+  Acc extends unknown[],
+> =
+  L.Length<A> extends 0
+    ? Acc
+    : _EventGeneratorArgs<
+        L.Pop<A>,
+        R,
+        L.Prepend<B, L.Last<A>>,
+        Acc | L.Append<A, EventGeneratorFn<B, R>>
+      >
 
-export type EventGenerators<EventGens extends EventGeneratorsT> = Partial<{
-  [EventName in keyof EventGens]: EventGenerator<Broker>[]
+export type EventGenerators<$ extends MessageBusContext> = Partial<{
+  [EventName in keyof $['generators']]: EventGenerator<$>[]
 }>

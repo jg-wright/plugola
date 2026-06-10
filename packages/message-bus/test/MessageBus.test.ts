@@ -6,14 +6,15 @@ import { CancelEvent } from '../src/symbols.js'
 import { AbortError, timeout } from '@johngw/async'
 import MessageBusError from '../src/MessageBusError.js'
 import { CreateEvents } from '../src/types/events.js'
+import { CreateMessageBusContext } from '../src/types/MessageBus.js'
 import { CreateInvokablesDict } from '../src/types/invokables.js'
 import { CreateEventGenerators } from '../src/types/generators.js'
 import { write } from '@johngw/stream'
 
 describe('events', () => {
   type Events = CreateEvents<{ foo: []; bar: [string]; mung: [string, number] }>
-  let messageBus: MessageBus<Events, {}, {}>
-  let broker: Broker<Events, {}, {}>
+  let messageBus: MessageBus<CreateMessageBusContext<{ events: Events }>>
+  let broker: Broker<CreateMessageBusContext<{ events: Events }>>
   let foo: Mock<() => void>
   let bar: Mock<(x: string) => void>
 
@@ -138,8 +139,8 @@ describe('iterators', () => {
     foo: { args: []; yield: string }
     bar: { args: [string]; yield: string }
   }>
-  let messageBus: MessageBus<{}, Iterables, {}>
-  let broker: Broker<{}, Iterables, {}>
+  let messageBus: MessageBus<CreateMessageBusContext<{ generators: Iterables }>>
+  let broker: Broker<CreateMessageBusContext<{ generators: Iterables }>>
 
   beforeEach(() => {
     messageBus = new MessageBus()
@@ -198,8 +199,10 @@ describe('invokables', () => {
     afoo: { args: [string]; return: string }
     never: { args: []; return: Promise<never> }
   }>
-  let messageBus: MessageBus<{}, {}, Invokables>
-  let broker: Broker<{}, {}, Invokables>
+  let messageBus: MessageBus<
+    CreateMessageBusContext<{ invokables: Invokables }>
+  >
+  let broker: Broker<CreateMessageBusContext<{ invokables: Invokables }>>
   let foo: Mock<() => string>
   let bar: Mock<(x: string) => string>
 
@@ -286,8 +289,8 @@ describe('invokables', () => {
 
 describe('error handling', () => {
   type Events = { foo: []; bar: [string] }
-  let messageBus: MessageBus<Events, {}, {}>
-  let broker: Broker<Events, {}, {}>
+  let messageBus: MessageBus<CreateMessageBusContext<{ events: Events }>>
+  let broker: Broker<CreateMessageBusContext<{ events: Events }>>
 
   beforeEach(() => {
     messageBus = new MessageBus()
@@ -325,8 +328,8 @@ describe('error handling', () => {
 
 describe('streams', () => {
   type Streamables = { foo: { args: [number]; item: string } }
-  let messageBus: MessageBus<{}, {}, {}, Streamables>
-  let broker: Broker<{}, {}, {}, Streamables>
+  let messageBus: MessageBus<CreateMessageBusContext<{ streams: Streamables }>>
+  let broker: Broker<CreateMessageBusContext<{ streams: Streamables }>>
 
   beforeEach(() => {
     messageBus = new MessageBus()
@@ -410,5 +413,29 @@ describe('streams', () => {
 
     expect(fn).toHaveBeenCalledTimes(1)
     expect(fn.mock.calls[0][0]).toBe('100')
+  })
+
+  test('specification applying', async () => {
+    const fn = vi.fn()
+
+    broker.reader('foo', 10, () => ({
+      start(controller) {
+        controller.enqueue('10')
+        controller.close()
+      },
+    }))
+
+    broker.reader('foo', (x) => ({
+      start(controller) {
+        controller.enqueue(x.toString())
+        controller.close()
+      },
+    }))
+
+    await broker.stream('foo', 10).pipeTo(write(fn))
+
+    expect(fn).toHaveBeenCalledTimes(2)
+    expect(fn.mock.calls[0][0]).toBe('10')
+    expect(fn.mock.calls[1][0]).toBe('10')
   })
 })
