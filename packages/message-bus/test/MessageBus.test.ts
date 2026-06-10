@@ -10,6 +10,7 @@ import { CreateMessageBusContext } from '../src/types/MessageBus.js'
 import { CreateInvokablesDict } from '../src/types/invokables.js'
 import { CreateEventGenerators } from '../src/types/generators.js'
 import { write } from '@johngw/stream'
+import { objectWith, predicate } from '../src/matcher.js'
 
 describe('events', () => {
   type Events = CreateEvents<{ foo: []; bar: [string]; mung: [string, number] }>
@@ -437,5 +438,108 @@ describe('streams', () => {
     expect(fn).toHaveBeenCalledTimes(2)
     expect(fn.mock.calls[0][0]).toBe('10')
     expect(fn.mock.calls[1][0]).toBe('10')
+  })
+})
+
+describe('matchers', () => {
+  type $ = CreateMessageBusContext<{
+    events: {
+      foo: [{ bar: number; baz?: string }]
+      keyed: [{ id: number }, string]
+      nested: [{ meta: { tag: string } }]
+      num: [number]
+    }
+    invokables: {
+      handle: { args: [{ id: number }]; return: string }
+    }
+    streams: { feed: { args: [{ kind: string }]; item: string } }
+    generators: {
+      gen: { args: [{ tag: string }]; yield: string }
+    }
+  }>
+
+  let messageBus: MessageBus<$>
+  let broker: Broker<$>
+
+  beforeEach(() => {
+    messageBus = new MessageBus()
+    broker = messageBus.broker('test')
+    messageBus.start()
+  })
+
+  test('objectWith fires only on matching objects', () => {
+    const fn = vi.fn()
+    broker.on('foo', objectWith({ bar: 2 }), fn)
+    broker.emit('foo', { bar: 1 })
+    broker.emit('foo', { bar: 2 })
+    broker.emit('foo', { bar: 2, baz: 'x' })
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+
+  test('the matched argument is consumed', () => {
+    const fn = vi.fn()
+    broker.on('keyed', objectWith({ id: 1 }), fn)
+    broker.emit('keyed', { id: 1 }, 'hello')
+    expect(fn).toHaveBeenCalledWith('hello', expect.any(AbortSignal))
+  })
+
+  test('objectWith matches nested objects deeply', () => {
+    const fn = vi.fn()
+    broker.on('nested', objectWith({ meta: { tag: 'a' } }), fn)
+    broker.emit('nested', { meta: { tag: 'b' } })
+    broker.emit('nested', { meta: { tag: 'a' } })
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  test('predicate matches arbitrary values', () => {
+    const fn = vi.fn()
+    broker.on(
+      'num',
+      predicate((n: number) => n > 2),
+      fn,
+    )
+    broker.emit('num', 1)
+    broker.emit('num', 3)
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect(fn).toHaveBeenCalledWith(expect.any(AbortSignal))
+  })
+
+  test('matchers filter invoker registrations', async () => {
+    broker.register('handle', objectWith({ id: 1 }), () => 'one')
+    broker.register('handle', () => 'other')
+    expect(await broker.invoke('handle', { id: 1 })).toBe('one')
+    expect(await broker.invoke('handle', { id: 2 })).toBe('other')
+  })
+
+  test('matchers filter stream readers', async () => {
+    const fn = vi.fn()
+    broker.reader('feed', objectWith({ kind: 'a' }), () => ({
+      start(controller) {
+        controller.enqueue('matched')
+        controller.close()
+      },
+    }))
+    broker.reader('feed', objectWith({ kind: 'b' }), () => ({
+      start(controller) {
+        controller.enqueue('ERROR')
+        controller.close()
+      },
+    }))
+    await broker.stream('feed', { kind: 'a' }).pipeTo(write(fn))
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect(fn.mock.calls[0][0]).toBe('matched')
+  })
+
+  test('matchers filter generators', async () => {
+    const results: string[] = []
+    broker.generator('gen', objectWith({ tag: 'a' }), async function* () {
+      yield 'matched'
+    })
+    broker.generator('gen', objectWith({ tag: 'b' }), async function* () {
+      yield 'ERROR'
+    })
+    for await (const result of broker.iterate('gen', { tag: 'a' }))
+      results.push(result)
+    expect(results).toEqual(['matched'])
   })
 })

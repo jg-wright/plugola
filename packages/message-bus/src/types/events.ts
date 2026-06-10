@@ -1,4 +1,5 @@
 import type { L } from 'ts-toolbelt'
+import type { Matcher, Matchable } from '../matcher.js'
 import type Broker from '../Broker.js'
 import type { CancelEvent } from '../symbols.js'
 import type { AddAbortSignal, MessageBusContext } from './MessageBus.js'
@@ -36,7 +37,7 @@ type _SubscriberArgs<
     : _SubscriberArgs<
         L.Pop<A>,
         L.Prepend<B, L.Last<A>>,
-        L.Append<A, SubscriberFn<B>> | Acc
+        L.Append<Matchable<A>, SubscriberFn<B>> | Acc
       >
 
 /**
@@ -48,10 +49,10 @@ type _SubscriberArgs<
  * // | [string]
  * // | [string, number]
  */
-export type UntilArgs<A extends unknown[]> = _UntilArgs<A, A>
+export type UntilArgs<A extends unknown[]> = _UntilArgs<A, Matchable<A>>
 
 type _UntilArgs<A extends unknown[], Acc extends unknown[]> =
-  L.Length<A> extends 0 ? Acc : _UntilArgs<L.Pop<A>, L.Pop<A> | Acc>
+  L.Length<A> extends 0 ? Acc : _UntilArgs<L.Pop<A>, Matchable<L.Pop<A>> | Acc>
 
 /**
  * The return value of `.until` from given arguments and
@@ -70,9 +71,11 @@ type _UntilArgs<A extends unknown[], Acc extends unknown[]> =
 export type UntilRtn<T extends unknown[], Args extends unknown[]> =
   L.Length<Args> extends 0
     ? T
-    : L.Head<T> extends L.Head<Args>
+    : L.Head<Args> extends Matcher<any>
       ? UntilRtn<L.Tail<T>, L.Tail<Args>>
-      : never
+      : L.Head<T> extends L.Head<Args>
+        ? UntilRtn<L.Tail<T>, L.Tail<Args>>
+        : never
 
 export type Subscribers<$ extends MessageBusContext> = Partial<{
   [EventName in keyof $['events']]: Subscriber<$>[]
@@ -114,7 +117,7 @@ type _EventInterceptorArgs<
         L.Pop<A>,
         L.Prepend<B, L.Last<A>>,
         C,
-        Acc | [...A, EventInterceptorFn<B, C>]
+        Acc | [...Matchable<A>, EventInterceptorFn<B, C>]
       >
 
 export type EventInterceptors<$ extends MessageBusContext> = Partial<{

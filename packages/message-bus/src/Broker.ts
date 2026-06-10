@@ -1,4 +1,3 @@
-import { InvokerRegistrationArgs } from '@plugola/invoke'
 import type MessageBus from './MessageBus.js'
 import SubscriptionDisposer from './SubscriptionDisposer.js'
 import type {
@@ -8,7 +7,10 @@ import type {
   UntilRtn,
 } from './types/events.js'
 import type { EventGeneratorArgs } from './types/generators.js'
-import type { InvokerInterceptorArgs } from './types/invokables.js'
+import type {
+  InvokerInterceptorArgs,
+  MatchableInvokerRegistrationArgs,
+} from './types/invokables.js'
 import {
   ErrorHandler,
   MessageBusContext,
@@ -183,7 +185,7 @@ export default class Broker<$ extends MessageBusContext = MessageBusContext> {
 
   register<InvokableName extends keyof $['invokables']>(
     invokableName: InvokableName,
-    ...args: InvokerRegistrationArgs<
+    ...args: MatchableInvokerRegistrationArgs<
       $['invokables'][InvokableName]['args'],
       $['invokables'][InvokableName]['return']
     >

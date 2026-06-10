@@ -1,6 +1,7 @@
-import type { InvokerFn } from '@plugola/invoke'
+import type { InvokerFn, InvokerRegistrationArgs } from '@plugola/invoke'
 import type Broker from '../Broker.js'
 import type { L } from 'ts-toolbelt'
+import type { Matchable } from '../matcher.js'
 import type { MessageBusContext } from './MessageBus.js'
 
 export {
@@ -9,6 +10,23 @@ export {
   InvokerFn,
   InvokerRegistrationArgs,
 } from '@plugola/invoke'
+
+/**
+ * {@link InvokerRegistrationArgs} with matchers allowed in every filter-prefix
+ * position. Invoke owns the base type and stays matcher-agnostic; we widen each
+ * union member's prefix here, at the message-bus boundary.
+ */
+export type MatchableInvokerRegistrationArgs<
+  A extends unknown[],
+  Return,
+> = WrapPrefix<InvokerRegistrationArgs<A, Return>>
+
+type WrapPrefix<U extends unknown[]> = U extends [
+  ...infer Pre extends unknown[],
+  infer Fn,
+]
+  ? [...Matchable<Pre>, Fn]
+  : U
 
 export interface Invoker<
   $ extends MessageBusContext,
@@ -50,7 +68,7 @@ export type _InvokerInterceptorArgs<
         L.Pop<A>,
         Return,
         B,
-        Acc | L.Append<A, InvokerInterceptorFn<B, Return>>
+        Acc | L.Append<Matchable<A>, InvokerInterceptorFn<B, Return>>
       >
 
 export type InvokerInterceptors<$ extends MessageBusContext> = Partial<{
