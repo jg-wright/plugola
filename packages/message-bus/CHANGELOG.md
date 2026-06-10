@@ -1,5 +1,13 @@
 # Changelog
 
+## [7.1.0](https://github.com/jg-wright/plugola/compare/message-bus-v7.0.0...message-bus-v7.1.0) (2026-06-10)
+
+
+### Features
+
+* **message-bus:** match arguments with matchers ([827ceb1](https://github.com/jg-wright/plugola/commit/827ceb14a33813deb5f4a170a1f7f04bbde54aaa))
+* **message-bus:** match arguments with matchers ([34940bf](https://github.com/jg-wright/plugola/commit/34940bf70b895e775c34c280fd1b7eea99c9483d))
+
 ## [7.0.0](https://github.com/jg-wright/plugola/compare/message-bus-v6.0.4...message-bus-v7.0.0) (2026-06-10)
 
 
