@@ -34,12 +34,7 @@ import {
 import { anySignal, fromSignal } from './AbortController.js'
 import { InvokableNotRegisteredError } from './errors/InvokableNotRegisteredError.js'
 import { InvokerFn, InvokerRegistrationArgs } from '@plugola/invoke'
-import {
-  ReaderFn,
-  StreamReader,
-  StreamReaderArgs,
-  Streams,
-} from './types/streams.js'
+import { StreamReader, StreamReaderArgs, Streams } from './types/streams.js'
 import { WritableReadablePair } from '@johngw/stream/transformers/WritableReadablePair'
 import { mergeUnderlyingSource } from '@johngw/stream'
 
@@ -421,17 +416,12 @@ export default class MessageBus<
       $['streams'][StreamName]['item']
     >,
   ): Unsubscriber {
-    const args = init(allArgs) as $['streams'][StreamName]['args']
+    type $StreamReader = StreamReader<$, StreamName>
 
-    const fn = last(allArgs) as ReaderFn<
-      $['streams'][StreamName]['args'],
-      $['streams'][StreamName]['item']
-    >
-
-    const streamer: StreamReader<any, any[], any> = {
+    const streamer: $StreamReader = {
       broker,
-      args,
-      fn,
+      args: init(allArgs) as $StreamReader['args'],
+      fn: last(allArgs) as $StreamReader['fn'],
     }
 
     this.#streams[streamName] ??= []
@@ -441,7 +431,7 @@ export default class MessageBus<
     const cancel = () => {
       this.#streams[streamName] = removeItem(
         streamer,
-        this.#streams[streamName] as any,
+        this.#streams[streamName]!,
       )
     }
 

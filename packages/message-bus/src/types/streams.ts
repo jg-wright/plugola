@@ -13,20 +13,18 @@ export type ReaderFn<Args extends unknown[], I> = (
 
 export interface StreamReader<
   $ extends MessageBusContext,
-  Args extends unknown[],
-  Item,
+  StreamName extends keyof $['streams'],
 > {
   broker: Broker<$>
-  args: Args
-  fn: ReaderFn<Args, Item>
+  args: $['streams'][StreamName]['args']
+  fn: ReaderFn<
+    $['streams'][StreamName]['args'],
+    $['streams'][StreamName]['item']
+  >
 }
 
 export type Streams<$ extends MessageBusContext> = Partial<{
-  [StreamName in keyof $['streams']]: StreamReader<
-    $,
-    $['streams'][StreamName]['args'],
-    $['streams'][StreamName]['item']
-  >[]
+  [StreamName in keyof $['streams']]: StreamReader<$, StreamName>[]
 }>
 
 /**
