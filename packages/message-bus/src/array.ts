@@ -28,38 +28,32 @@ export function replaceLastItem<Ts extends unknown[], T>(array: Ts, item: T) {
 
 export function filterMap<I, O, C>(
   array: I[],
-  context: (input: I) => C,
-  filter: (input: I, context: C) => boolean,
-  map: (input: I, context: C) => O,
+  context: ContextCreator<I, C>,
+  filter: Filterer<I, C>,
+  map: Mapper<I, O, C>,
 ): O[]
 export function filterMap<I, O>(
   array: I[],
-  filter: (input: I) => I,
-  map: (input: I) => O,
+  filter: Filterer<I, never>,
+  map: Mapper<I, O, never>,
 ): O[]
 export function filterMap<I, O, C>(
   array: I[],
-  contextOrFilter: ((input: I) => C) | ((input: I, context: C) => boolean),
-  filterOrMap:
-    | ((input: I, context: C) => boolean)
-    | ((input: I, context: C) => O),
-  maybeMap?: (input: I, context: C) => O,
+  contextOrFilter: ContextCreator<I, C> | Filterer<I, C>,
+  filterOrMap: Filterer<I, C> | Mapper<I, O, C>,
+  maybeMap?: Mapper<I, O, C>,
 ): O[] {
-  type GetContext = (input: I) => C
-  type Filter = (input: I, context: C) => boolean
-  type Map = (input: I, context: C) => O
-
-  let context: undefined | GetContext
-  let filter: Filter
-  let map: Map
+  let context: undefined | ContextCreator<I, C>
+  let filter: Filterer<I, C>
+  let map: Mapper<I, O, C>
 
   if (maybeMap) {
-    context = contextOrFilter as GetContext
-    filter = filterOrMap as Filter
-    map = maybeMap as Map
+    context = contextOrFilter as ContextCreator<I, C>
+    filter = filterOrMap as Filterer<I, C>
+    map = maybeMap as Mapper<I, O, C>
   } else {
-    filter = contextOrFilter as Filter
-    map = filterOrMap as Map
+    filter = contextOrFilter as Filterer<I, C>
+    map = filterOrMap as Mapper<I, O, C>
   }
 
   const output: O[] = []
@@ -69,3 +63,13 @@ export function filterMap<I, O, C>(
   }
   return output
 }
+
+type Filterer<I, C> = C extends never
+  ? (input: I) => boolean
+  : (input: I, context: C) => boolean
+
+type Mapper<I, O, C> = C extends never
+  ? (input: I) => O
+  : (input: I, context: C) => O
+
+type ContextCreator<I, C> = (input: I) => C
