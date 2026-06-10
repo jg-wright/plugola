@@ -2,7 +2,7 @@
   "packages/graph": "3.0.3",
   "packages/invoke": "2.0.3",
   "packages/logger": "5.0.3",
-  "packages/message-bus": "6.0.4",
+  "packages/message-bus": "7.0.0",
   "packages/plugin-manager": "9.0.0",
   "packages/query-params": "3.0.4",
   "packages/store": "8.0.3",

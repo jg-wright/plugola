@@ -1,5 +1,18 @@
 # Changelog
 
+## [7.0.0](https://github.com/jg-wright/plugola/compare/message-bus-v6.0.4...message-bus-v7.0.0) (2026-06-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **message-bus:** `MessageBus`, `Broker`, and `InvokableNotRegisteredError` now take a single `MessageBusContext` type parameter instead of four positional generics. Replace `MessageBus<Events, Gens, Invokables, Streams>` with `MessageBus<CreateMessageBusContext<{ events: Events;
+
+### Features
+
+* add broker streaming ([2c03766](https://github.com/jg-wright/plugola/commit/2c03766bf075a4d4118029f7b98ee13f30df6458))
+* add broker streaming ([9c765d3](https://github.com/jg-wright/plugola/commit/9c765d32131bcac5566af848c7d6217b044e9791))
+* **message-bus:** collapse generics into a single MessageBusContext ([529ee5b](https://github.com/jg-wright/plugola/commit/529ee5bda1652549dcbc2e2f13933b268c0980e0))
+
 ## [6.0.4](https://github.com/jg-wright/plugola/compare/message-bus-v6.0.3...message-bus-v6.0.4) (2026-06-09)
 
 
