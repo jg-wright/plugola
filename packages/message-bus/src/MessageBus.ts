@@ -4,7 +4,7 @@ import {
   combineIterators,
   iteratorRace,
 } from '@johngw/async-iterator'
-import { init, last, removeItem, replaceLastItem } from './array.js'
+import { filterMap, init, last, removeItem, replaceLastItem } from './array.js'
 import Broker from './Broker.js'
 import MessageBusError from './MessageBusError.js'
 import { amend } from './object.js'
@@ -30,7 +30,11 @@ import {
   Invokers,
 } from './types/invokables.js'
 import { Stringable, UnpackResolvableValue } from './types/util.js'
-import { ErrorHandler, Unsubscriber } from './types/MessageBus.js'
+import {
+  AddAbortSignal,
+  ErrorHandler,
+  Unsubscriber,
+} from './types/MessageBus.js'
 import { anySignal, fromSignal } from './AbortController.js'
 import { InvokableNotRegisteredError } from './errors/InvokableNotRegisteredError.js'
 import {
@@ -38,11 +42,21 @@ import {
   InvokerFn,
   InvokerRegistrationArgs,
 } from '@plugola/invoke'
+import {
+  ReaderFn,
+  StreamReader,
+  StreamReaderArgs,
+  Streams,
+  StreamsDict,
+} from './types/streams.js'
+import { WritableReadablePair } from '@johngw/stream/transformers/WritableReadablePair'
+import { mergeUnderlyingSource } from '@johngw/stream'
 
 export default class MessageBus<
   Events extends EventsT = EventsT,
   EventGens extends EventGeneratorsT = EventGeneratorsT,
   Invokables extends InvokablesDict = InvokablesDict,
+  Streamables extends StreamsDict = StreamsDict,
 > {
   #errorHandlers: ErrorHandler[] = []
   #eventInterceptors: EventInterceptors<Events> = {}
@@ -51,6 +65,7 @@ export default class MessageBus<
   #invokerInterceptors: InvokerInterceptors<Invokables> = {}
   #queued: Array<() => unknown> = []
   #started = false
+  #streams: Streams<Streamables> = {}
   #subscribers: Subscribers<Events> = {}
 
   onError(errorHandler: ErrorHandler) {
@@ -72,7 +87,11 @@ export default class MessageBus<
         ? abort
         : fromSignal(abort)
 
-    return new Broker<Events, EventGens, Invokables>(this, id, abortController)
+    return new Broker<Events, EventGens, Invokables, Streamables>(
+      this,
+      id,
+      abortController,
+    )
   }
 
   async start() {
@@ -81,7 +100,7 @@ export default class MessageBus<
   }
 
   emit<EventName extends keyof Events>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     eventName: EventName,
     args: Events[EventName],
     abortSignal?: AbortSignal,
@@ -117,7 +136,7 @@ export default class MessageBus<
   }
 
   interceptEvent<EventName extends keyof Events>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     eventName: EventName,
     args: EventInterceptorArgs<Events[EventName]>,
   ): Unsubscriber {
@@ -142,7 +161,7 @@ export default class MessageBus<
   }
 
   interceptInvoker<InvokableName extends keyof Invokables>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     invokableName: InvokableName,
     args: InvokerInterceptorArgs<
       Invokables[InvokableName]['args'],
@@ -170,7 +189,7 @@ export default class MessageBus<
   }
 
   on<EventName extends keyof Events>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     eventName: EventName,
     args: SubscriberArgs<Events[EventName]>,
   ): Unsubscriber {
@@ -201,7 +220,7 @@ export default class MessageBus<
   }
 
   once<EventName extends keyof Events>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     eventName: EventName,
     args: SubscriberArgs<Events[EventName]>,
   ): Unsubscriber {
@@ -222,7 +241,7 @@ export default class MessageBus<
     EventName extends keyof Events,
     Args extends UntilArgs<Events[EventName]>,
   >(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     eventName: EventName,
     args: Args,
     abortSignal?: AbortSignal,
@@ -250,7 +269,7 @@ export default class MessageBus<
   }
 
   generator<EventName extends keyof EventGens>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     eventName: EventName,
     args: EventGeneratorArgs<
       EventGens[EventName]['args'],
@@ -284,7 +303,7 @@ export default class MessageBus<
   }
 
   async *iterate<EventName extends keyof EventGens>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     eventName: EventName,
     args: EventGens[EventName]['args'],
     abortSignal?: AbortSignal,
@@ -304,7 +323,7 @@ export default class MessageBus<
   }
 
   iterateWithin<EventName extends keyof EventGens>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     within: number,
     eventName: EventName,
     args: EventGens[EventName]['args'],
@@ -318,7 +337,7 @@ export default class MessageBus<
   }
 
   async accumulate<EventName extends keyof EventGens>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     eventName: EventName,
     args: EventGens[EventName]['args'],
     abortSignal?: AbortSignal,
@@ -327,7 +346,7 @@ export default class MessageBus<
   }
 
   async accumulateWithin<EventName extends keyof EventGens>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     within: number,
     eventName: EventName,
     args: EventGens[EventName]['args'],
@@ -339,7 +358,7 @@ export default class MessageBus<
   }
 
   register<InvokableName extends keyof Invokables>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     invokableName: InvokableName,
     allArgs: InvokerRegistrationArgs<
       Invokables[InvokableName]['args'],
@@ -389,7 +408,7 @@ export default class MessageBus<
   }
 
   async invoke<InvokableName extends keyof Invokables>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     invokableName: InvokableName,
     args: Invokables[InvokableName]['args'],
     abortSignal?: AbortSignal,
@@ -406,6 +425,84 @@ export default class MessageBus<
       })
 
     return this.#started ? handle() : this.#queue(broker, handle)
+  }
+
+  reader<StreamName extends keyof Streamables>(
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
+    streamName: StreamName,
+    allArgs: StreamReaderArgs<
+      Streamables[StreamName]['args'],
+      Streamables[StreamName]['item']
+    >,
+  ): Unsubscriber {
+    const args = init(allArgs) as Streamables[StreamName]['args']
+
+    const fn = last(allArgs) as ReaderFn<
+      Streamables[StreamName]['args'],
+      Streamables[StreamName]['item']
+    >
+
+    const streamer: StreamReader<any, any[], any> = {
+      broker,
+      args,
+      fn,
+    }
+
+    this.#streams[streamName] ??= []
+
+    this.#streams[streamName].push(streamer)
+
+    const cancel = () => {
+      this.#streams[streamName] = removeItem(
+        streamer,
+        this.#streams[streamName] as any,
+      )
+    }
+
+    broker.onAbort(cancel)
+
+    return cancel
+  }
+
+  stream<StreamName extends keyof Streamables>(
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
+    streamName: StreamName,
+    args: Streamables[StreamName]['args'],
+    abortSignal?: AbortSignal,
+  ): ReadableStream<Streamables[StreamName]['item']> {
+    type Item = Streamables[StreamName]['item']
+
+    const streamers = this.#streams[streamName] ?? []
+
+    const abortSignalComposite = anySignal(abortSignal, broker.abortSignal)
+
+    const streams = () =>
+      filterMap(
+        streamers,
+        (streamer) => this.#argumentIndex(streamer.args, args),
+        (_streamer, argumentIndex) => argumentIndex !== -1,
+        (streamer, argumentIndex) =>
+          new ReadableStream(
+            streamer.fn(
+              ...([
+                ...streamer.args.slice(0, argumentIndex),
+                ...args.slice(argumentIndex),
+                abortSignalComposite,
+              ] as AddAbortSignal<Streamables[StreamName]['args']>),
+            ),
+          ),
+      )
+
+    return new ReadableStream({
+      start: async (controller) => {
+        if (!this.#started) await this.#queue(broker, () => {})
+        const abort = () => controller.error(abortSignalComposite.reason)
+        if (abortSignalComposite.aborted) return abort()
+        abortSignalComposite.addEventListener('abort', abort)
+      },
+    }).pipeThrough(
+      new WritableReadablePair<never, Item>({}, mergeUnderlyingSource(streams)),
+    )
   }
 
   #callEventInterceptors<EventName extends keyof Events>(
@@ -527,7 +624,7 @@ export default class MessageBus<
   }
 
   async #queue<T>(
-    broker: Broker<Events, EventGens, Invokables>,
+    broker: Broker<Events, EventGens, Invokables, Streamables>,
     handler: () => T,
   ) {
     return new Promise<UnpackResolvableValue<T>>((resolve, reject) => {

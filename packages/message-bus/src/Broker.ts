@@ -14,16 +14,18 @@ import type {
 } from './types/generators.js'
 import type { InvokerInterceptorArgs } from './types/invokables.js'
 import { ErrorHandler, Unsubscriber } from './types/MessageBus.js'
+import { StreamReaderArgs, StreamsDict } from './types/streams.js'
 
 export default class Broker<
   Events extends EventsT = EventsT,
   EventGens extends EventGeneratorsT = EventGeneratorsT,
-  Invokables extends InvokablesDict = InvokablesDict
+  Invokables extends InvokablesDict = InvokablesDict,
+  Streamables extends StreamsDict = StreamsDict,
 > {
   constructor(
-    messageBus: MessageBus<Events, EventGens, Invokables>,
+    messageBus: MessageBus<Events, EventGens, Invokables, Streamables>,
     id: string,
-    abortController: AbortController
+    abortController: AbortController,
   ) {
     this.#abortController = abortController
     this.#id = id
@@ -40,7 +42,7 @@ export default class Broker<
     return this.abortSignal.aborted
   }
 
-  get abortSignal() {
+  get abortSignal(): AbortSignal {
     return this.#abortController.signal
   }
 
@@ -54,7 +56,7 @@ export default class Broker<
     return this.#id
   }
 
-  readonly #messageBus: MessageBus<Events, EventGens, Invokables>
+  readonly #messageBus: MessageBus<Events, EventGens, Invokables, Streamables>
   get messageBus() {
     return this.#messageBus
   }
@@ -117,7 +119,7 @@ export default class Broker<
 
   async until<
     EventName extends keyof Events,
-    Args extends UntilArgs<Events[EventName]>
+    Args extends UntilArgs<Events[EventName]>,
   >(
     eventName: EventName,
     ...args: Args
@@ -127,7 +129,7 @@ export default class Broker<
 
   async untilSignal<
     EventName extends keyof Events,
-    Args extends UntilArgs<Events[EventName]>
+    Args extends UntilArgs<Events[EventName]>,
   >(
     eventName: EventName,
     abortSignal: AbortSignal,
@@ -217,5 +219,22 @@ export default class Broker<
     >
   ): Unsubscriber {
     return this.#messageBus.interceptInvoker(this, invokableName, args)
+  }
+
+  reader<StreamName extends keyof Streamables>(
+    streamName: StreamName,
+    ...args: StreamReaderArgs<
+      Streamables[StreamName]['args'],
+      Streamables[StreamName]['item']
+    >
+  ): Unsubscriber {
+    return this.#messageBus.reader(this, streamName, args)
+  }
+
+  stream<StreamName extends keyof Streamables>(
+    streamName: StreamName,
+    ...args: Streamables[StreamName]['args']
+  ): ReadableStream<Streamables[StreamName]['item']> {
+    return this.#messageBus.stream(this, streamName, args)
   }
 }

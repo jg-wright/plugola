@@ -8,6 +8,7 @@ import MessageBusError from '../src/MessageBusError.js'
 import { CreateEvents } from '../src/types/events.js'
 import { CreateInvokablesDict } from '../src/types/invokables.js'
 import { CreateEventGenerators } from '../src/types/generators.js'
+import { write } from '@johngw/stream'
 
 describe('events', () => {
   type Events = CreateEvents<{ foo: []; bar: [string]; mung: [string, number] }>
@@ -320,4 +321,94 @@ describe('error handling', () => {
       broker.emit('foo')
       messageBus.start()
     }))
+})
+
+describe('streams', () => {
+  type Streamables = { foo: { args: [number]; item: string } }
+  let messageBus: MessageBus<{}, {}, {}, Streamables>
+  let broker: Broker<{}, {}, {}, Streamables>
+
+  beforeEach(() => {
+    messageBus = new MessageBus()
+    messageBus.start()
+    broker = messageBus.broker('test')
+  })
+
+  test('single reader', async () => {
+    const fn = vi.fn()
+
+    broker.reader('foo', (x) => ({
+      start(controller) {
+        controller.enqueue(x.toString())
+        controller.close()
+      },
+    }))
+
+    await broker.stream('foo', 100).pipeTo(write(fn))
+
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect(fn.mock.calls[0][0]).toBe('100')
+  })
+
+  test('multiple readers', async () => {
+    const fn = vi.fn()
+
+    broker.reader('foo', (x) => ({
+      start(controller) {
+        controller.enqueue(x.toString())
+        controller.close()
+      },
+    }))
+
+    broker.reader('foo', (x) => ({
+      start(controller) {
+        controller.enqueue(x.toString())
+        controller.close()
+      },
+    }))
+
+    await broker.stream('foo', 100).pipeTo(write(fn))
+
+    expect(fn).toHaveBeenCalledTimes(2)
+    expect(fn.mock.calls[0][0]).toBe('100')
+    expect(fn.mock.calls[1][0]).toBe('100')
+  })
+
+  test('aborting', async () => {
+    broker.reader('foo', (x) => ({
+      start(controller) {
+        controller.enqueue(x.toString())
+        controller.close()
+      },
+    }))
+
+    const promise = broker.stream('foo', 100).pipeTo(write())
+
+    broker.abort()
+
+    await expect(promise).rejects.toThrow()
+  })
+
+  test('specification filtering', async () => {
+    const fn = vi.fn()
+
+    broker.reader('foo', 10, () => ({
+      start(controller) {
+        controller.enqueue('10')
+        controller.close()
+      },
+    }))
+
+    broker.reader('foo', (x) => ({
+      start(controller) {
+        controller.enqueue(x.toString())
+        controller.close()
+      },
+    }))
+
+    await broker.stream('foo', 100).pipeTo(write(fn))
+
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect(fn.mock.calls[0][0]).toBe('100')
+  })
 })
