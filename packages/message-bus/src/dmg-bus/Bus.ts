@@ -1,14 +1,12 @@
+import type { BusBroker } from './Broker/BusBroker.js'
 import { brokerFactory } from './Broker/Factory.js'
-import { InboundBroker } from './Broker/InboundBroker.js'
-import { OutboundBroker } from './Broker/OutboundBroker.js'
-import { Event, EventClass, Invocation, InvocationClass } from './Event.js'
-import { withCounter } from './Function.js'
+import type { PluginBroker } from './Broker/PluginBroker.js'
+import type { Event, EventClass, Invocation, InvocationClass } from './Event.js'
+import { withCounter } from './lang/Function.js'
+import { getOrInsert } from './lang/Map.js'
 
 export class Bus {
-  #brokers = new Map<
-    string,
-    { broker: InboundBroker; abortController: AbortController }
-  >()
+  #brokers = new Map<string, BusBroker>()
 
   #eventBrokers = new Map<EventClass, Set<string>>()
 
@@ -18,25 +16,22 @@ export class Bus {
     if (this.#brokers.has(name))
       throw new Error(`Broker "${name}" has already been registered`)
 
-    const { abortController, inboundBroker, outboundBroker } = brokerFactory(
-      name,
-      this,
-    )
+    const { abortSignal, busBroker, pluginBroker } = brokerFactory(this, name)
 
-    this.#brokers.set(name, { broker: inboundBroker, abortController })
+    this.#brokers.set(name, busBroker)
 
-    abortController.signal.addEventListener('abort', () => {
+    abortSignal.addEventListener('abort', () => {
       this.#brokers.delete(name)
       for (const brokerNames of this.#eventBrokers.values()) {
         brokerNames.delete(name)
       }
     })
 
-    return outboundBroker
+    return pluginBroker
   }
 
-  on<E extends EventClass>(broker: OutboundBroker, eventClass: E): () => void {
-    const eventBrokers = this.#eventBrokers.getOrInsert(eventClass, new Set())
+  on<E extends EventClass>(broker: PluginBroker, eventClass: E): () => void {
+    const eventBrokers = getOrInsert(this.#eventBrokers, eventClass, new Set())
     eventBrokers.add(broker.name)
     return () => {
       this.#eventBrokers.get(eventClass)?.delete(broker.name)
@@ -46,14 +41,18 @@ export class Bus {
   emit<E extends Event>(event: E) {
     const eventBrokers = this.#eventBrokers.get(event.constructor as EventClass)
     if (!eventBrokers?.size) return
-    for (const name of eventBrokers) this.#brokers.get(name)?.broker.emit(event)
+    for (const name of eventBrokers) this.#brokers.get(name)?.emit(event)
   }
 
   register<T>(
-    broker: OutboundBroker,
+    broker: PluginBroker,
     eventClass: InvocationClass<T>,
   ): () => void {
-    const invokeBrokers = this.#invokeBrokers.getOrInsert(eventClass, new Set())
+    const invokeBrokers = getOrInsert(
+      this.#invokeBrokers,
+      eventClass,
+      new Set(),
+    )
     invokeBrokers.add(broker.name)
     return () => {
       this.#invokeBrokers.get(eventClass)?.delete(broker.name)
@@ -79,22 +78,22 @@ export class Bus {
     })
 
     for (const name of invokeBrokers)
-      this.#brokers.get(name)?.broker.invoke(event, { ...context, finish })
+      this.#brokers.get(name)?.invoke(event, { ...context, finish })
   }
 
   abort(name: string, reason?: Error) {
-    this.#brokers.get(name)?.abortController.abort(reason)
+    this.#brokers.get(name)?.abort(reason)
   }
 
   start(name?: string) {
     if (name === undefined)
-      for (const { broker } of this.#brokers.values()) broker.start()
-    else this.#brokers.get(name)?.broker.start()
+      for (const broker of this.#brokers.values()) broker.start()
+    else this.#brokers.get(name)?.start()
   }
 
   stop(name?: string) {
     if (name === undefined)
-      for (const { broker } of this.#brokers.values()) broker.stop()
-    else this.#brokers.get(name)?.broker.stop()
+      for (const broker of this.#brokers.values()) broker.stop()
+    else this.#brokers.get(name)?.stop()
   }
 }

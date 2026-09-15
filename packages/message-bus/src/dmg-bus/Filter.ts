@@ -1,4 +1,4 @@
-import { EventClass } from './Event.js'
+import type { EventClass } from './Event.js'
 
 export type Filter<E extends EventClass> = {
   [K in keyof InstanceType<E>]?: FilterValue<E, K>

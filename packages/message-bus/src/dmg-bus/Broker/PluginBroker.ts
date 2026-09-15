@@ -1,4 +1,4 @@
-import {
+import type {
   Event,
   EventClass,
   Invocation,
@@ -10,14 +10,14 @@ import {
   InvocationListener,
   InvocationListenerContext,
 } from '../EventListener.js'
-import { Filter } from '../Filter.js'
-import { queueMethod } from '../queuedMethods.js'
-import { Broker } from './Broker.js'
+import type { Filter } from '../Filter.js'
+import { getOrInsert } from '../lang/Map.js'
+import type { BrokerModel } from './BrokerModel.js'
 import { EventHandler } from './EventHandler.js'
 import { InvocationHandler } from './InvocationHandler.js'
 
-export class OutboundBroker {
-  readonly #broker: Broker
+export class PluginBroker {
+  readonly #model: BrokerModel
 
   readonly #invoke: <E extends InvocationClass<unknown>>(
     event: InstanceType<E>,
@@ -26,11 +26,17 @@ export class OutboundBroker {
 
   readonly emit: (event: Event) => void
 
-  constructor(broker: Broker) {
-    this.#broker = broker
+  get name() {
+    return this.#model.name
+  }
 
-    this.#invoke = queueMethod(
-      broker.queue,
+  constructor(
+    model: BrokerModel,
+    readonly abortSignal: AbortSignal,
+  ) {
+    this.#model = model
+
+    this.#invoke = model.queue.queueMethod(
       (
         event: Invocation<unknown>,
         context: {
@@ -39,26 +45,26 @@ export class OutboundBroker {
           signal?: AbortSignal
         },
       ) => {
-        this.#broker.bus.emit(event)
-        this.#broker.bus.invoke(event, context)
+        this.#model.bus.emit(event)
+        this.#model.bus.invoke(event, context)
       },
     )
 
-    this.emit = queueMethod(broker.queue, (event: Event) => {
-      this.#broker.bus.emit(event)
+    this.emit = model.queue.queueMethod((event: Event) => {
+      this.#model.bus.emit(event)
     })
   }
 
   start(name: string) {
-    this.#broker.bus.start(name)
+    this.#model.bus.start(name)
   }
 
   stop(name: string) {
-    this.#broker.bus.stop(name)
+    this.#model.bus.stop(name)
   }
 
   abort(name: string, reason?: any) {
-    this.#broker.bus.abort(name, reason)
+    this.#model.bus.abort(name, reason)
   }
 
   on<E extends EventClass>(
@@ -79,15 +85,18 @@ export class OutboundBroker {
   ): () => void {
     const filter = (eventListener ? filterOrEventListener : {}) as Filter<E>
     eventListener ??= filterOrEventListener as EventListener<E>
-    const eventHandlers = this.#broker.eventHandlers.getOrInsert(
+
+    const eventHandlers = getOrInsert(
+      this.#model.eventHandlers,
       eventClass,
       new Set(),
     )
     const eventHandler = new EventHandler(filter, eventListener)
     eventHandlers.add(eventHandler)
-    const unregister = this.#broker.bus.on(this, eventClass)
+
+    const unregister = this.#model.bus.on(this, eventClass)
     return () => {
-      const eventHandlers = this.#broker.eventHandlers.get(eventClass)
+      const eventHandlers = this.#model.eventHandlers.get(eventClass)
       eventHandlers?.delete(eventHandler)
       if (!eventHandlers?.size) unregister()
     }
@@ -123,11 +132,11 @@ export class OutboundBroker {
     filter: Filter<E> = {},
   ): Promise<InstanceType<E>> {
     return new Promise((resolve, reject) => {
-      const onAbort = () => reject(this.#broker.abortSignal.reason)
-      if (this.#broker.abortSignal.aborted) return onAbort()
-      this.#broker.abortSignal.addEventListener('abort', onAbort)
+      const onAbort = () => reject(this.abortSignal.reason)
+      if (this.abortSignal.aborted) return onAbort()
+      this.abortSignal.addEventListener('abort', onAbort)
       this.once(eventClass, filter, (event) => {
-        this.#broker.abortSignal.removeEventListener('abort', onAbort)
+        this.abortSignal.removeEventListener('abort', onAbort)
         resolve(event)
       })
     })
@@ -151,15 +160,18 @@ export class OutboundBroker {
   ): () => void {
     const filter = (listener ? filterOrListener : {}) as Filter<E>
     listener ??= filterOrListener as InvocationListener<E>
-    const handlers = this.#broker.invokeHandlers.getOrInsert(
+
+    const handlers = getOrInsert(
+      this.#model.invokeHandlers,
       eventClass,
       new Set(),
     )
     const handler = new InvocationHandler(filter, listener)
     handlers.add(handler)
-    const unregister = this.#broker.bus.register(this, eventClass)
+
+    const unregister = this.#model.bus.register(this, eventClass)
     return () => {
-      const handlers = this.#broker.invokeHandlers.get(eventClass)
+      const handlers = this.#model.invokeHandlers.get(eventClass)
       handlers?.delete(handler)
       if (!handlers?.size) unregister()
     }
@@ -181,19 +193,19 @@ export class OutboundBroker {
 
     const readableStream = new ReadableStream<T>({
       start: (controller) => {
-        const abort = () => controller.error(this.#broker.abortSignal.reason)
+        const abort = () => controller.error(this.abortSignal.reason)
         const close = () => controller.close()
 
-        if (this.#broker.abortSignal.aborted) return abort()
+        if (this.abortSignal.aborted) return abort()
         if (signal?.aborted) return close()
 
-        this.#broker.abortSignal.addEventListener('abort', abort)
+        this.abortSignal.addEventListener('abort', abort)
         signal?.addEventListener('abort', close)
 
         this.#invoke(event, {
-          send: (value: T) => controller.enqueue(value),
+          send: (value: unknown) => controller.enqueue(value as T),
           finish: () => {
-            this.#broker.abortSignal.removeEventListener('abort', abort)
+            this.abortSignal.removeEventListener('abort', abort)
             signal?.removeEventListener('abort', close)
             controller.close()
           },

@@ -1,6 +1,6 @@
-import { Event, EventClass } from '../Event.js'
-import { EventListener } from '../EventListener.js'
-import { Filter } from '../Filter.js'
+import type { Event, EventClass } from '../Event.js'
+import type { EventListener } from '../EventListener.js'
+import type { Filter } from '../Filter.js'
 import { Handler } from './Handler.js'
 
 export class EventHandler extends Handler {

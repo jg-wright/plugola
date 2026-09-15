@@ -1,18 +1,17 @@
-import './polyfill.js'
 import { setTimeout } from 'node:timers/promises'
 import { beforeEach, describe, expect, Mock, test, vi } from 'vitest'
-import { PluginBroker } from './PluginBroker.js'
 import { Bus } from './Bus.js'
 import { Event, Invocation } from './Event.js'
-import { InvocationListenerParams } from './EventListener.js'
+import type { InvocationListenerContext } from './EventListener.js'
+import type { PluginBroker } from './Broker/PluginBroker.js'
 
 let brokerA: PluginBroker
 let brokerB: PluginBroker
 
 beforeEach(() => {
   const bus = new Bus()
-  brokerA = bus.broker('a').pluginBroker()
-  brokerB = bus.broker('b').pluginBroker()
+  brokerA = bus.broker('a')
+  brokerB = bus.broker('b')
   bus.start()
 })
 
@@ -71,7 +70,7 @@ describe('invoke', () => {
   let spy: Mock<
     (
       event: TestInvocation,
-      { send, finish }: InvocationListenerParams<typeof TestInvocation>,
+      { send, finish }: InvocationListenerContext<typeof TestInvocation>,
     ) => void
   >
 

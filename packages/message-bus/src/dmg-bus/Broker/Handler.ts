@@ -1,5 +1,5 @@
-import { Event, EventClass } from '../Event.js'
-import { Filter, FilterEntries, FilterPredicate } from '../Filter.js'
+import type { Event, EventClass } from '../Event.js'
+import type { Filter, FilterEntries, FilterPredicate } from '../Filter.js'
 
 export abstract class Handler {
   readonly #filterEntries: FilterEntries<EventClass>
