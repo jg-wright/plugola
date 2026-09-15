@@ -1,4 +1,4 @@
-import { DiscriminatedQueue } from './Queue/DiscriminatedQueue.js'
+import { DiscriminatedQueue } from './DiscriminatedQueue.js'
 
 export class MethodQueue extends DiscriminatedQueue<
   Record<symbol, { args: unknown[] }>
