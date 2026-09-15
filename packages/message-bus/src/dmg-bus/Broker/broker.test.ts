@@ -1,9 +1,9 @@
 import { setTimeout } from 'node:timers/promises'
 import { beforeEach, describe, expect, Mock, test, vi } from 'vitest'
-import { Bus } from './Bus.js'
-import { Event, Invocation } from './Event.js'
-import type { InvocationListenerContext } from './EventListener.js'
-import type { PluginBroker } from './Broker/PluginBroker.js'
+import { Bus } from '../Bus.js'
+import { Event, Invocation } from '../Event.js'
+import type { InvocationListenerContext } from '../EventListener.js'
+import type { PluginBroker } from './PluginBroker.js'
 
 let brokerA: PluginBroker
 let brokerB: PluginBroker

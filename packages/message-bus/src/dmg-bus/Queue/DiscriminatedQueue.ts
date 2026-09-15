@@ -5,10 +5,13 @@ export class DiscriminatedQueue<
 > extends Queue<DiscriminatedQueueItem<T>> {
   #execRecord: DiscriminatedQueueExecRecord<T>
 
-  constructor(execRecord: DiscriminatedQueueExecRecord<T>) {
+  constructor(
+    execRecord: DiscriminatedQueueExecRecord<T>,
+    items?: DiscriminatedQueueItem<T>[],
+  ) {
     super((item) => {
       execRecord[item.type](item)
-    })
+    }, items)
     this.#execRecord = execRecord
   }
 
@@ -16,10 +19,14 @@ export class DiscriminatedQueue<
     type: K,
     exec: (item: T) => void,
   ): DiscriminatedQueue<T & { [P in K]: T }> {
-    type NewQueue = DiscriminatedQueue<T & { [P in K]: T }>
-    const newQueue = this as unknown as NewQueue
-    newQueue.#execRecord[type] = exec
-    return newQueue
+    type NewT = T & { [P in K]: T }
+    return new DiscriminatedQueue<NewT>(
+      {
+        ...this.#execRecord,
+        [type]: exec,
+      },
+      this.items as unknown as DiscriminatedQueueItem<NewT>[],
+    )
   }
 }
 
