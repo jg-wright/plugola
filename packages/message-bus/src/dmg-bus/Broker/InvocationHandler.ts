@@ -17,7 +17,7 @@ export class InvocationHandler extends Handler {
     this.#listener = listener
   }
 
-  handle(
+  override handle(
     event: Invocation<unknown>,
     context: InvocationListenerContext<InvocationClass<unknown>>,
   ) {

@@ -8,6 +8,8 @@ export abstract class Handler {
     this.#filterEntries = Object.entries(filter) as FilterEntries<EventClass>
   }
 
+  abstract handle(...args: unknown[]): unknown
+
   protected filter(event: Event) {
     return (
       !this.#filterEntries.length ||

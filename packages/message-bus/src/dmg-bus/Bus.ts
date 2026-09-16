@@ -32,7 +32,10 @@ export class Bus {
     return new PluginBroker(broker)
   }
 
-  on<E extends EventClass>(broker: PluginBroker, eventClass: E): () => void {
+  on = <E extends EventClass>(
+    broker: PluginBroker,
+    eventClass: E,
+  ): (() => void) => {
     const eventBrokers = getOrInsert(this.#eventBrokers, eventClass, new Set())
     eventBrokers.add(broker.name)
     return () => {
@@ -58,10 +61,10 @@ export class Bus {
     return event
   }
 
-  register<T>(
+  register = <T>(
     broker: PluginBroker,
     eventClass: InvocationClass<T>,
-  ): () => void {
+  ): (() => void) => {
     const invokeBrokers = getOrInsert(
       this.#invokeBrokers,
       eventClass,
@@ -73,7 +76,7 @@ export class Bus {
     }
   }
 
-  intercept(broker: PluginBroker, eventClass: EventClass): () => void {
+  intercept = (broker: PluginBroker, eventClass: EventClass): (() => void) => {
     const interceptBrokers = getOrInsert(
       this.#interceptBrokers,
       eventClass,

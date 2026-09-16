@@ -16,6 +16,7 @@ import type { Filter } from '../Filter.js'
 import { getOrInsert } from '../lang/Map.js'
 import type { Broker } from './Broker.js'
 import { EventHandler } from './EventHandler.js'
+import type { Handler } from './Handler.js'
 import { InterceptionHandler } from './InterceptionHandler.js'
 import { InvocationHandler } from './InvocationHandler.js'
 
@@ -101,23 +102,14 @@ export class PluginBroker {
     filterOrEventListener: Filter<E> | EventListener<E>,
     eventListener?: EventListener<E>,
   ): () => void {
-    const filter = (eventListener ? filterOrEventListener : {}) as Filter<E>
-    eventListener ??= filterOrEventListener as EventListener<E>
-
-    const eventHandlers = getOrInsert(
+    return this.#addListener(
+      (filter, listener) => new EventHandler(filter, listener),
       this.#broker.eventHandlers,
+      this.#broker.bus.on,
       eventClass,
-      new Set(),
+      filterOrEventListener,
+      eventListener,
     )
-    const eventHandler = new EventHandler(filter, eventListener)
-    eventHandlers.add(eventHandler)
-
-    const unregister = this.#broker.bus.on(this, eventClass)
-    return () => {
-      const eventHandlers = this.#broker.eventHandlers.get(eventClass)
-      eventHandlers?.delete(eventHandler)
-      if (!eventHandlers?.size) unregister()
-    }
   }
 
   once<E extends EventClass>(
@@ -176,23 +168,14 @@ export class PluginBroker {
     filterOrListener: Filter<E> | InvocationListener<E>,
     listener?: InvocationListener<E>,
   ): () => void {
-    const filter = (listener ? filterOrListener : {}) as Filter<E>
-    listener ??= filterOrListener as InvocationListener<E>
-
-    const handlers = getOrInsert(
+    return this.#addListener(
+      (filter, listener) => new InvocationHandler(filter, listener),
       this.#broker.invokeHandlers,
+      this.#broker.bus.register as any,
       eventClass,
-      new Set(),
+      filterOrListener,
+      listener,
     )
-    const handler = new InvocationHandler(filter, listener)
-    handlers.add(handler)
-
-    const unregister = this.#broker.bus.register(this, eventClass)
-    return () => {
-      const handlers = this.#broker.invokeHandlers.get(eventClass)
-      handlers?.delete(handler)
-      if (!handlers?.size) unregister()
-    }
   }
 
   intercept<E extends EventClass>(
@@ -211,23 +194,14 @@ export class PluginBroker {
     filterOrListener: Filter<E> | InterceptionListener<E>,
     listener?: InterceptionListener<E>,
   ): () => void {
-    const filter = (listener ? filterOrListener : {}) as Filter<E>
-    listener ??= filterOrListener as InterceptionListener<E>
-
-    const handlers = getOrInsert(
+    return this.#addListener(
+      (filter, listener) => new InterceptionHandler(filter, listener),
       this.#broker.interceptionHandlers,
+      this.#broker.bus.intercept,
       eventClass,
-      new Set(),
+      filterOrListener,
+      listener,
     )
-    const handler = new InterceptionHandler(filter, listener)
-    handlers.add(handler)
-
-    const unregister = this.#broker.bus.intercept(this, eventClass)
-    return () => {
-      const handlers = this.#broker.interceptionHandlers.get(eventClass)
-      handlers?.delete(handler)
-      if (!handlers?.size) unregister()
-    }
   }
 
   invoke<E extends Invocation<unknown>>(
@@ -297,6 +271,33 @@ export class PluginBroker {
       },
 
       iterate: () => readableStream.values(),
+    }
+  }
+
+  #addListener<
+    H extends Handler,
+    E extends EventClass,
+    F extends (...args: any[]) => any,
+  >(
+    createHandler: (filter: Filter<E>, eventListener: F) => H,
+    registry: Map<EventClass, Set<H>>,
+    subscribe: (broker: this, eventClass: EventClass) => () => void,
+    eventClass: EventClass,
+    filterOrEventListener: Filter<EventClass> | F,
+    eventListener?: F,
+  ) {
+    const filter = (eventListener ? filterOrEventListener : {}) as Filter<E>
+    eventListener ??= filterOrEventListener as F
+
+    const handlers = getOrInsert(registry, eventClass, new Set())
+    const handler = createHandler(filter, eventListener)
+    handlers.add(handler)
+
+    const unregister = subscribe(this, eventClass)
+    return () => {
+      const handlers = registry.get(eventClass)
+      handlers?.delete(handler)
+      if (!handlers?.size) unregister()
     }
   }
 }

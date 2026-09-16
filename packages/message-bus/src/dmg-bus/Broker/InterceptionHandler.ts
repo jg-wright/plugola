@@ -19,7 +19,7 @@ export class InterceptionHandler extends Handler {
     this.#listener = listener
   }
 
-  handle(event: Event): InterceptionResult<EventClass> {
+  override handle(event: Event): InterceptionResult<EventClass> {
     if (this.filter(event)) return this.#listener(event as any)
   }
 }

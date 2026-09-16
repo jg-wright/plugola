@@ -11,7 +11,7 @@ export class EventHandler extends Handler {
     this.#listener = listener
   }
 
-  handle(event: Event) {
+  override handle(event: Event) {
     if (this.filter(event)) this.#listener(event)
   }
 }

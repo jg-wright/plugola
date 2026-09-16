@@ -5,7 +5,7 @@ import type {
   Invocation,
   InvocationClass,
 } from '../Event.js'
-import { CANCEL, InvocationListenerContext } from '../EventListener.js'
+import { CANCEL, type InvocationListenerContext } from '../EventListener.js'
 import { withCounter } from '../lang/Function.js'
 import { MethodQueue } from '../Queue/MethodQueue.js'
 import type { EventHandler } from './EventHandler.js'
