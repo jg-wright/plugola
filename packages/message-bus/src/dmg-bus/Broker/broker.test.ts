@@ -1,4 +1,4 @@
-import { setTimeout } from 'node:timers/promises'
+import { timeout } from '../lang/Signal.js'
 import { beforeEach, describe, expect, Mock, test, vi } from 'vitest'
 import { Bus } from '../Bus.js'
 import { Event, Invocation } from '../Event.js'
@@ -132,12 +132,15 @@ describe('invoke', () => {
   })
 
   test('timeouts', async () => {
-    brokerA.register(TestInvocation, async (event, { finish, send }) => {
-      send(`hello ${event.foo}`)
-      await setTimeout(1_000)
-      send(`hello again ${event.foo}`)
-      finish()
-    })
+    brokerA.register(
+      TestInvocation,
+      async (event, { finish, send, signal }) => {
+        send(`hello ${event.foo}`)
+        await timeout(1_000, signal)
+        send(`hello again ${event.foo}`)
+        finish()
+      },
+    )
 
     expect(
       await brokerB

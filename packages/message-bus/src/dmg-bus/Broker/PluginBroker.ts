@@ -12,12 +12,12 @@ import {
 } from '../EventListener.js'
 import type { Filter } from '../Filter.js'
 import { getOrInsert } from '../lang/Map.js'
-import type { BrokerModel } from './BrokerModel.js'
+import type { Broker } from './Broker.js'
 import { EventHandler } from './EventHandler.js'
 import { InvocationHandler } from './InvocationHandler.js'
 
 export class PluginBroker {
-  readonly #model: BrokerModel
+  readonly #broker: Broker
 
   readonly #invoke: <E extends InvocationClass<unknown>>(
     event: InstanceType<E>,
@@ -27,16 +27,30 @@ export class PluginBroker {
   readonly emit: (event: Event) => void
 
   get name() {
-    return this.#model.name
+    return this.#broker.name
   }
 
-  constructor(
-    model: BrokerModel,
-    readonly abortSignal: AbortSignal,
-  ) {
-    this.#model = model
+  get abortSignal(): AbortSignal {
+    return this.#broker.abortSignal
+  }
 
-    this.#invoke = model.queue.queueMethod(
+  get aborted() {
+    return this.abortSignal.aborted
+  }
+
+  get abortReason() {
+    return this.abortSignal.reason
+  }
+
+  onAbort(fn: (reason: any) => any) {
+    this.abortSignal.addEventListener('abort', fn)
+    return () => this.abortSignal.removeEventListener('abort', fn)
+  }
+
+  constructor(broker: Broker) {
+    this.#broker = broker
+
+    this.#invoke = broker.queue.queueMethod(
       (
         event: Invocation<unknown>,
         context: {
@@ -45,26 +59,26 @@ export class PluginBroker {
           signal?: AbortSignal
         },
       ) => {
-        this.#model.bus.emit(event)
-        this.#model.bus.invoke(event, context)
+        this.#broker.bus.emit(event)
+        this.#broker.bus.invoke(event, context)
       },
     )
 
-    this.emit = model.queue.queueMethod((event: Event) => {
-      this.#model.bus.emit(event)
+    this.emit = broker.queue.queueMethod((event: Event) => {
+      this.#broker.bus.emit(event)
     })
   }
 
   start(name: string) {
-    this.#model.bus.start(name)
+    this.#broker.bus.start(name)
   }
 
   stop(name: string) {
-    this.#model.bus.stop(name)
+    this.#broker.bus.stop(name)
   }
 
   abort(name: string, reason?: any) {
-    this.#model.bus.abort(name, reason)
+    this.#broker.bus.abort(name, reason)
   }
 
   on<E extends EventClass>(
@@ -87,16 +101,16 @@ export class PluginBroker {
     eventListener ??= filterOrEventListener as EventListener<E>
 
     const eventHandlers = getOrInsert(
-      this.#model.eventHandlers,
+      this.#broker.eventHandlers,
       eventClass,
       new Set(),
     )
     const eventHandler = new EventHandler(filter, eventListener)
     eventHandlers.add(eventHandler)
 
-    const unregister = this.#model.bus.on(this, eventClass)
+    const unregister = this.#broker.bus.on(this, eventClass)
     return () => {
-      const eventHandlers = this.#model.eventHandlers.get(eventClass)
+      const eventHandlers = this.#broker.eventHandlers.get(eventClass)
       eventHandlers?.delete(eventHandler)
       if (!eventHandlers?.size) unregister()
     }
@@ -162,16 +176,16 @@ export class PluginBroker {
     listener ??= filterOrListener as InvocationListener<E>
 
     const handlers = getOrInsert(
-      this.#model.invokeHandlers,
+      this.#broker.invokeHandlers,
       eventClass,
       new Set(),
     )
     const handler = new InvocationHandler(filter, listener)
     handlers.add(handler)
 
-    const unregister = this.#model.bus.register(this, eventClass)
+    const unregister = this.#broker.bus.register(this, eventClass)
     return () => {
-      const handlers = this.#model.invokeHandlers.get(eventClass)
+      const handlers = this.#broker.invokeHandlers.get(eventClass)
       handlers?.delete(handler)
       if (!handlers?.size) unregister()
     }
@@ -191,27 +205,50 @@ export class PluginBroker {
   } {
     type T = InvocationType<E>
 
+    const self = this
+    const producer = new AbortController()
+    let settled = false
+    let teardown = (_reason?: any) => {}
+
     const readableStream = new ReadableStream<T>({
       start: (controller) => {
-        const abort = () => controller.error(this.abortSignal.reason)
-        const close = () => controller.close()
-
-        if (this.abortSignal.aborted) return abort()
-        if (signal?.aborted) return close()
-
-        this.abortSignal.addEventListener('abort', abort)
+        const offAbort = this.onAbort(abort)
         signal?.addEventListener('abort', close)
 
+        teardown = (reason?: any) => {
+          if (settled) return
+          settled = true
+          offAbort()
+          signal?.removeEventListener('abort', close)
+          producer.abort(reason)
+        }
+
+        if (this.aborted) return abort()
+        if (signal?.aborted) return close()
+
         this.#invoke(event, {
-          send: (value: unknown) => controller.enqueue(value as T),
-          finish: () => {
-            this.abortSignal.removeEventListener('abort', abort)
-            signal?.removeEventListener('abort', close)
-            controller.close()
+          send: (value: unknown) => {
+            if (settled) return
+            controller.enqueue(value as T)
           },
-          signal,
+          finish: close,
+          signal: producer.signal,
         })
+
+        function close() {
+          if (settled) return
+          teardown(signal?.reason)
+          controller.close()
+        }
+
+        function abort() {
+          if (settled) return
+          teardown(self.abortReason)
+          controller.error(self.abortReason)
+        }
       },
+
+      cancel: (reason) => teardown(reason),
     })
 
     return {

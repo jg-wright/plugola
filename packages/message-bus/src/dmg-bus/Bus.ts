@@ -1,12 +1,11 @@
-import type { BusBroker } from './Broker/BusBroker.js'
-import { brokerFactory } from './Broker/Factory.js'
-import type { PluginBroker } from './Broker/PluginBroker.js'
+import { Broker } from './Broker/Broker.js'
+import { PluginBroker } from './Broker/PluginBroker.js'
 import type { Event, EventClass, Invocation, InvocationClass } from './Event.js'
 import { withCounter } from './lang/Function.js'
 import { getOrInsert } from './lang/Map.js'
 
 export class Bus {
-  #brokers = new Map<string, BusBroker>()
+  #brokers = new Map<string, Broker>()
 
   #eventBrokers = new Map<EventClass, Set<string>>()
 
@@ -16,18 +15,18 @@ export class Bus {
     if (this.#brokers.has(name))
       throw new Error(`Broker "${name}" has already been registered`)
 
-    const { abortSignal, busBroker, pluginBroker } = brokerFactory(this, name)
+    const broker = new Broker(this, name)
+    this.#brokers.set(name, broker)
 
-    this.#brokers.set(name, busBroker)
-
-    abortSignal.addEventListener('abort', () => {
+    broker.onAbort(() => {
       this.#brokers.delete(name)
-      for (const brokerNames of this.#eventBrokers.values()) {
+      for (const brokerNames of this.#eventBrokers.values())
         brokerNames.delete(name)
-      }
+      for (const brokerNames of this.#invokeBrokers.values())
+        brokerNames.delete(name)
     })
 
-    return pluginBroker
+    return new PluginBroker(broker)
   }
 
   on<E extends EventClass>(broker: PluginBroker, eventClass: E): () => void {
