@@ -1,5 +1,8 @@
 import type { EventClass, Invocation, InvocationClass } from '../Event.js'
-import type { InvocationListener } from '../EventListener.js'
+import type {
+  InvocationListener,
+  InvocationListenerContext,
+} from '../EventListener.js'
 import type { Filter } from '../Filter.js'
 import { Handler } from './Handler.js'
 
@@ -16,11 +19,7 @@ export class InvocationHandler extends Handler {
 
   handle(
     event: Invocation<unknown>,
-    context: {
-      send: (value: unknown) => void
-      finish: () => void
-      signal?: AbortSignal
-    },
+    context: InvocationListenerContext<InvocationClass<unknown>>,
   ) {
     if (this.filter(event)) this.#listener(event, context)
   }

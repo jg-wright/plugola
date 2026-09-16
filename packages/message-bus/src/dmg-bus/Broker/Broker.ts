@@ -5,9 +5,11 @@ import type {
   Invocation,
   InvocationClass,
 } from '../Event.js'
+import { CANCEL, InvocationListenerContext } from '../EventListener.js'
 import { withCounter } from '../lang/Function.js'
 import { MethodQueue } from '../Queue/MethodQueue.js'
 import type { EventHandler } from './EventHandler.js'
+import type { InterceptionHandler } from './InterceptionHandler.js'
 import type { InvocationHandler } from './InvocationHandler.js'
 
 /**
@@ -25,6 +27,11 @@ export class Broker {
   readonly invokeHandlers = new Map<
     InvocationClass<unknown>,
     Set<InvocationHandler>
+  >()
+
+  readonly interceptionHandlers = new Map<
+    EventClass,
+    Set<InterceptionHandler>
   >()
 
   readonly queue = new MethodQueue()
@@ -59,13 +66,29 @@ export class Broker {
     return () => this.abortSignal.removeEventListener('abort', fn)
   }
 
+  async intercept<E extends EventClass | InvocationClass<unknown>>(
+    event: InstanceType<E>,
+  ): Promise<InstanceType<E> | typeof CANCEL> {
+    if (!this.queue.running) return event
+
+    const interceptionHandlers = this.interceptionHandlers.get(
+      event.constructor as EventClass,
+    )
+
+    if (!interceptionHandlers?.size) return event
+
+    for (const interceptionHandler of interceptionHandlers) {
+      const result = await interceptionHandler.handle(event)
+      if (result === CANCEL) return CANCEL
+      else if (result) event = result as InstanceType<E>
+    }
+
+    return event
+  }
+
   invoke<T>(
     event: Invocation<T>,
-    context: {
-      finish: () => void
-      send: (value: any) => void
-      signal?: AbortSignal
-    },
+    context: InvocationListenerContext<InvocationClass<T>>,
   ) {
     if (!this.queue.running) return context.finish()
 
@@ -75,12 +98,14 @@ export class Broker {
 
     if (!invokeHandlers?.size) return context.finish()
 
-    const finish = withCounter((counter) => {
-      if (counter >= invokeHandlers.size) context.finish()
-    })
+    const handlerContext = {
+      ...context,
+      finish: withCounter((counter) => {
+        if (counter >= invokeHandlers.size) context.finish()
+      }),
+    } as InvocationListenerContext<InvocationClass<T>>
 
-    for (const handler of invokeHandlers)
-      handler.handle(event, { ...context, finish })
+    for (const handler of invokeHandlers) handler.handle(event, handlerContext)
   }
 
   start() {

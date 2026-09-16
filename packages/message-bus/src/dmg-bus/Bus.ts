@@ -1,6 +1,7 @@
 import { Broker } from './Broker/Broker.js'
 import { PluginBroker } from './Broker/PluginBroker.js'
 import type { Event, EventClass, Invocation, InvocationClass } from './Event.js'
+import { CANCEL } from './EventListener.js'
 import { withCounter } from './lang/Function.js'
 import { getOrInsert } from './lang/Map.js'
 
@@ -10,6 +11,8 @@ export class Bus {
   #eventBrokers = new Map<EventClass, Set<string>>()
 
   #invokeBrokers = new Map<InvocationClass<unknown>, Set<string>>()
+
+  #interceptBrokers = new Map<EventClass, Set<string>>()
 
   broker(name: string) {
     if (this.#brokers.has(name))
@@ -37,10 +40,22 @@ export class Bus {
     }
   }
 
-  emit<E extends Event>(event: E) {
+  async emit<E extends Event>(event: E): Promise<E | typeof CANCEL> {
+    const interceptorBrokers =
+      this.#interceptBrokers.get(event.constructor as EventClass) ?? []
+
+    for (const name of interceptorBrokers) {
+      const result = await this.#brokers.get(name)?.intercept(event)
+      if (result === CANCEL) return CANCEL
+      else if (result) event = result as E
+    }
+
     const eventBrokers = this.#eventBrokers.get(event.constructor as EventClass)
-    if (!eventBrokers?.size) return
+    if (!eventBrokers?.size) return event
+
     for (const name of eventBrokers) this.#brokers.get(name)?.emit(event)
+
+    return event
   }
 
   register<T>(
@@ -58,6 +73,18 @@ export class Bus {
     }
   }
 
+  intercept(broker: PluginBroker, eventClass: EventClass): () => void {
+    const interceptBrokers = getOrInsert(
+      this.#interceptBrokers,
+      eventClass,
+      new Set(),
+    )
+    interceptBrokers.add(broker.name)
+    return () => {
+      this.#interceptBrokers.get(eventClass)?.delete(broker.name)
+    }
+  }
+
   invoke<T>(
     event: Invocation<T>,
     context: {
@@ -72,12 +99,15 @@ export class Bus {
 
     if (!invokeBrokers?.size) return context.finish()
 
-    const finish = withCounter((counter) => {
-      if (counter >= invokeBrokers.size) context.finish()
-    })
+    const brokerContext = {
+      ...context,
+      finish: withCounter((counter) => {
+        if (counter >= invokeBrokers.size) context.finish()
+      }),
+    }
 
     for (const name of invokeBrokers)
-      this.#brokers.get(name)?.invoke(event, { ...context, finish })
+      this.#brokers.get(name)?.invoke(event, brokerContext)
   }
 
   abort(name: string, reason?: Error) {

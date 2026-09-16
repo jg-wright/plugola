@@ -2,7 +2,7 @@ import { timeout } from '../lang/Signal.js'
 import { beforeEach, describe, expect, Mock, test, vi } from 'vitest'
 import { Bus } from '../Bus.js'
 import { Event, Invocation } from '../Event.js'
-import type { InvocationListenerContext } from '../EventListener.js'
+import { CANCEL, type InvocationListenerContext } from '../EventListener.js'
 import type { PluginBroker } from './PluginBroker.js'
 
 let brokerA: PluginBroker
@@ -99,11 +99,6 @@ describe('invoke', () => {
     expect(result).toEqual(['one thing', 'two thing'])
   })
 
-  test('promise', async () => {
-    await brokerB.invoke(new TestInvocation('thing')).promise()
-    expect(spy).toHaveBeenCalled()
-  })
-
   test('it emits the event as well', () => {
     const onSpy = vi.fn()
     const event = new TestInvocation('bar')
@@ -147,6 +142,41 @@ describe('invoke', () => {
         .invoke(new TestInvocation('foo'), { signal: AbortSignal.timeout(10) })
         .collect(),
     ).toEqual(['one foo', 'two foo', 'hello foo'])
+  })
+})
+
+describe('intercept', () => {
+  test('cancelling', async () => {
+    const spy = vi.fn()
+    brokerA.on(TestEvent, spy)
+    brokerB.intercept(TestEvent, () => CANCEL)
+    await brokerB.emit(new TestEvent('foo'))
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  test('changing the event', async () => {
+    const spy = vi.fn()
+    brokerA.on(TestEvent, spy)
+    brokerB.intercept(
+      TestEvent,
+      (event) => new TestEvent(`Intercepted ${event.foo}`),
+    )
+    await brokerB.emit(new TestEvent('foo'))
+    expect(spy).toHaveBeenCalledWith(new TestEvent('Intercepted foo'))
+  })
+
+  test('changing invocations', async () => {
+    const spy = vi.fn()
+    brokerA.register(TestInvocation, (event, { finish }) => {
+      spy(event)
+      finish()
+    })
+    brokerB.intercept(
+      TestInvocation,
+      (event) => new TestInvocation(`Intercepted ${event.foo}`),
+    )
+    await brokerB.invoke(new TestInvocation('foo')).collect()
+    expect(spy).toHaveBeenCalledWith(new TestInvocation('Intercepted foo'))
   })
 })
 

@@ -6,7 +6,9 @@ import type {
   InvocationType,
 } from '../Event.js'
 import {
+  CANCEL,
   EventListener,
+  InterceptionListener,
   InvocationListener,
   InvocationListenerContext,
 } from '../EventListener.js'
@@ -14,6 +16,7 @@ import type { Filter } from '../Filter.js'
 import { getOrInsert } from '../lang/Map.js'
 import type { Broker } from './Broker.js'
 import { EventHandler } from './EventHandler.js'
+import { InterceptionHandler } from './InterceptionHandler.js'
 import { InvocationHandler } from './InvocationHandler.js'
 
 export class PluginBroker {
@@ -24,7 +27,7 @@ export class PluginBroker {
     params: InvocationListenerContext<E>,
   ) => void
 
-  readonly emit: (event: Event) => void
+  readonly emit: <E extends Event>(event: E) => Promise<E | typeof CANCEL>
 
   get name() {
     return this.#broker.name
@@ -51,7 +54,7 @@ export class PluginBroker {
     this.#broker = broker
 
     this.#invoke = broker.queue.queueMethod(
-      (
+      async (
         event: Invocation<unknown>,
         context: {
           send(value: any): void
@@ -59,14 +62,15 @@ export class PluginBroker {
           signal?: AbortSignal
         },
       ) => {
-        this.#broker.bus.emit(event)
-        this.#broker.bus.invoke(event, context)
+        const result = await this.#broker.bus.emit(event)
+        if (result === CANCEL) return
+        this.#broker.bus.invoke(result, context)
       },
     )
 
-    this.emit = broker.queue.queueMethod((event: Event) => {
-      this.#broker.bus.emit(event)
-    })
+    this.emit = broker.queue.queueMethod(<E extends Event>(event: E) =>
+      this.#broker.bus.emit(event),
+    )
   }
 
   start(name: string) {
@@ -191,6 +195,41 @@ export class PluginBroker {
     }
   }
 
+  intercept<E extends EventClass>(
+    eventClass: E,
+    listener: InterceptionListener<E>,
+  ): () => void
+
+  intercept<E extends EventClass>(
+    eventClass: E,
+    filter: Filter<E>,
+    listener: InterceptionListener<E>,
+  ): () => void
+
+  intercept<E extends EventClass | InvocationClass<unknown>>(
+    eventClass: E,
+    filterOrListener: Filter<E> | InterceptionListener<E>,
+    listener?: InterceptionListener<E>,
+  ): () => void {
+    const filter = (listener ? filterOrListener : {}) as Filter<E>
+    listener ??= filterOrListener as InterceptionListener<E>
+
+    const handlers = getOrInsert(
+      this.#broker.interceptionHandlers,
+      eventClass,
+      new Set(),
+    )
+    const handler = new InterceptionHandler(filter, listener)
+    handlers.add(handler)
+
+    const unregister = this.#broker.bus.intercept(this, eventClass)
+    return () => {
+      const handlers = this.#broker.interceptionHandlers.get(eventClass)
+      handlers?.delete(handler)
+      if (!handlers?.size) unregister()
+    }
+  }
+
   invoke<E extends Invocation<unknown>>(
     event: E,
     {
@@ -201,7 +240,6 @@ export class PluginBroker {
   ): {
     collect(): Promise<InvocationType<E>[]>
     iterate(): AsyncIterable<InvocationType<E>, undefined>
-    promise(): Promise<void>
   } {
     type T = InvocationType<E>
 
@@ -259,14 +297,6 @@ export class PluginBroker {
       },
 
       iterate: () => readableStream.values(),
-
-      promise: async (concurrency = 10) => {
-        const reader = readableStream.getReader()
-        let item = await reader.read()
-        for (let i = 0; i < concurrency && !item.done; i++) {
-          while ((item = await reader.read()) && !item.done) {}
-        }
-      },
     }
   }
 }

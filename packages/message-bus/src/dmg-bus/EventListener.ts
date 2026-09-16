@@ -12,7 +12,19 @@ export interface InvocationListener<E extends InvocationClass<unknown>> {
 }
 
 export interface InvocationListenerContext<E extends InvocationClass<unknown>> {
-  send: (value: InvocationType<E>) => unknown
-  finish: () => unknown
+  send: (value: InvocationType<E>) => void
+  finish: () => void
   signal?: AbortSignal
+}
+
+export const CANCEL = Symbol.for('dmg-bus/cancel')
+
+export type InterceptionResult<E extends EventClass> =
+  | void
+  | InstanceType<E>
+  | typeof CANCEL
+  | Promise<InterceptionResult<E>>
+
+export interface InterceptionListener<E extends EventClass> {
+  (event: InstanceType<E>): InterceptionResult<E>
 }
