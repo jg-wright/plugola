@@ -74,6 +74,38 @@ test('initialize optional dependency tree', async () => {
   expect(result).toBe('foomung')
 })
 
+test('an optional dependency is enabled before its depender, even alongside hard dependencies', async () => {
+  // Regression: enabling a plugin's hard dependencies used to clobber the
+  // shared "plugins to enable" set, so an optional dependency requested in the
+  // same batch was no longer recognised as one — and the depender's enable()
+  // no longer waited for it.
+  let optEnabled = false
+
+  pluginManager.registerPlugin('dep', {
+    enable() {},
+  })
+
+  pluginManager.registerPlugin('opt', {
+    async enable() {
+      await timeout(10)
+      optEnabled = true
+    },
+  })
+
+  pluginManager.registerPlugin('mung', {
+    dependencies: ['dep'],
+    optionalDependencies: ['opt'],
+    enable() {
+      // opt was requested in this batch, so it must be enabled before us.
+      expect(optEnabled).toBe(true)
+    },
+  })
+
+  await pluginManager.enablePlugins(['mung', 'opt'])
+
+  expect(pluginManager.enabledPlugins).toContain('opt')
+})
+
 test('running normal plugins', async () => {
   let result: string
 

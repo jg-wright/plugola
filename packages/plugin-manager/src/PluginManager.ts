@@ -23,7 +23,7 @@ export default class PluginManager<
   #dependencyGraph = new DependencyGraph<Plugin>()
   #ran = new WeakSet<Plugin>()
   #abortControllers = new WeakMap<Plugin, AbortController>()
-  #pluginsToEnable = new Set<string>()
+  #pendingBatches = new Set<Set<string>>()
   #enabledPlugins = new Set<string>()
   #options: PluginManagerOptions<
     ExtraContext,
@@ -148,14 +148,34 @@ export default class PluginManager<
   }
 
   readonly enablePlugins = async (pluginNames: string[]) => {
-    this.#pluginsToEnable = new Set(pluginNames)
-    let promises: Promise<void>[] = []
+    await this.#enablePlugins(new Set(pluginNames))
+  }
 
-    for (const pluginName of this.#pluginsToEnable) {
-      this.#pluginsToEnable.delete(pluginName)
-      if (!this.#enabledPlugins.has(pluginName)) {
+  /**
+   * Enable every plugin named in a single batch.
+   *
+   * @remarks
+   * `toEnable` is the set of plugins explicitly requested by this call. It is
+   * threaded down through {@link #enablePlugin} so that optional dependencies
+   * are only enabled when they were requested in the *same* batch, and it is
+   * registered in {@link #pendingBatches} so that a plugin disabled mid-enable
+   * (during a synchronous `enable`) can be removed before it's dispatched.
+   *
+   * It is deliberately batch-local rather than an instance field: `enablePlugins`
+   * is re-entrant and runs its children concurrently, so a shared field would be
+   * clobbered by nested/concurrent calls.
+   */
+  async #enablePlugins(toEnable: Set<string>) {
+    this.#pendingBatches.add(toEnable)
+
+    try {
+      const promises: Promise<void>[] = []
+
+      for (const pluginName of toEnable) {
+        toEnable.delete(pluginName)
+        if (this.#enabledPlugins.has(pluginName)) continue
+
         let plugin: Plugin
-
         try {
           plugin = this.#getPlugin(pluginName)
         } catch (error: any) {
@@ -163,13 +183,16 @@ export default class PluginManager<
           continue
         }
 
-        promises.push(this.#enablePlugin(plugin))
+        promises.push(this.#enablePlugin(plugin, toEnable))
       }
+
+      await Promise.all(promises)
+    } finally {
+      this.#pendingBatches.delete(toEnable)
     }
-    await Promise.all(promises)
   }
 
-  async #enableOptionalDependencies(plugin: Plugin) {
+  async #enableOptionalDependencies(plugin: Plugin, toEnable: Set<string>) {
     if (!plugin?.optionalDependencies?.length) return
 
     const optionalDependencies: string[] = []
@@ -177,7 +200,7 @@ export default class PluginManager<
     for (const dependencyName of plugin.optionalDependencies) {
       if (
         !this.#enabledPlugins.has(dependencyName) &&
-        this.#pluginsToEnable.has(dependencyName)
+        toEnable.has(dependencyName)
       )
         optionalDependencies.push(dependencyName)
     }
@@ -210,7 +233,9 @@ export default class PluginManager<
 
   #disablePlugin(plugin: Plugin, force: boolean): number {
     let disabled = 0
-    this.#pluginsToEnable.delete(plugin.name) // incase we're disabling plugins during the enable phase
+    // Incase we're disabling plugins during the enable phase, remove it from
+    // every in-flight batch so it won't be dispatched.
+    for (const batch of this.#pendingBatches) batch.delete(plugin.name)
     if (!this.#enabledPlugins.has(plugin.name)) return disabled
     if (this.#isDependencyOfEnabledPlugin(plugin)) {
       if (force)
@@ -267,14 +292,16 @@ export default class PluginManager<
     return this.#abortControllers.get(plugin)!
   }
 
-  async #enablePlugin(plugin: Plugin) {
+  async #enablePlugin(plugin: Plugin, toEnable: Set<string>) {
     this.#enabledPlugins.add(plugin.name)
 
     const dependencyPromises: Promise<void>[] = []
     if (plugin.dependencies)
       dependencyPromises.push(this.enablePlugins(plugin.dependencies))
     if (plugin.optionalDependencies)
-      dependencyPromises.push(this.#enableOptionalDependencies(plugin))
+      dependencyPromises.push(
+        this.#enableOptionalDependencies(plugin, toEnable),
+      )
     if (dependencyPromises.length) await Promise.all(dependencyPromises)
 
     if (!plugin.enable) return
