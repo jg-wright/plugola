@@ -399,6 +399,53 @@ test('onUnknownPlugin handles unregistered plugins instead of throwing', async (
   expect(onUnknownPlugin).toHaveBeenCalledWith('nope', 'disable')
 })
 
+test('a plugin whose enable throws is rolled back and reported, siblings continue', async () => {
+  const onPluginError = vi.fn()
+  const pluginManager = new PluginManager({ onPluginError })
+  const good = vi.fn()
+
+  pluginManager.registerPlugin('bad', {
+    enable() {
+      throw new Error('boom')
+    },
+  })
+
+  pluginManager.registerPlugin('good', {
+    enable: good,
+  })
+
+  await pluginManager.enablePlugins(['bad', 'good'])
+
+  expect(good).toHaveBeenCalled()
+  expect(pluginManager.enabledPlugins).toContain('good')
+  expect(pluginManager.enabledPlugins).not.toContain('bad')
+  expect(onPluginError).toHaveBeenCalledOnce()
+  expect(onPluginError.mock.calls[0][2]).toBe('enable')
+})
+
+test('a plugin whose run throws is reported, siblings still run', async () => {
+  const onPluginError = vi.fn()
+  const pluginManager = new PluginManager({ onPluginError })
+  const good = vi.fn()
+
+  pluginManager.registerPlugin('bad', {
+    run() {
+      throw new Error('boom')
+    },
+  })
+
+  pluginManager.registerPlugin('good', {
+    run: good,
+  })
+
+  await pluginManager.enableAllPlugins()
+  await pluginManager.run()
+
+  expect(good).toHaveBeenCalled()
+  expect(onPluginError).toHaveBeenCalledOnce()
+  expect(onPluginError.mock.calls[0][2]).toBe('run')
+})
+
 test('plugins that time out', async () => {
   const abort = vi.fn<(reason: string) => void>()
 

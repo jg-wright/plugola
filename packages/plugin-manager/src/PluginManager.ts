@@ -20,6 +20,13 @@ export interface PluginManagerOptions<
    * skipped.
    */
   onUnknownPlugin?(pluginName: string, phase: 'enable' | 'disable'): void
+  /**
+   * Called when a plugin's `enable` or `run` throws. The failure is isolated —
+   * the plugin is rolled back (for `enable`) and its siblings keep going —
+   * then reported here. Defaults to `console.error`. Throw from this handler to
+   * opt back into fail-fast behaviour.
+   */
+  onPluginError?(error: unknown, plugin: Plugin, phase: 'enable' | 'run'): void
 }
 
 export default class PluginManager<
@@ -329,6 +336,12 @@ export default class PluginManager<
     else throw new Error(`The plugin "${pluginName}" isn't registered.`)
   }
 
+  #reportPluginError(error: unknown, plugin: Plugin, phase: 'enable' | 'run') {
+    if (this.#options.onPluginError)
+      this.#options.onPluginError(error, plugin, phase)
+    else console.error(error)
+  }
+
   #abortController(plugin: Plugin) {
     if (!this.#abortControllers.has(plugin)) {
       const abortController = new AbortController()
@@ -363,11 +376,19 @@ export default class PluginManager<
     const { signal } = this.#abortController(plugin)
     if (signal.aborted) return
 
-    await this.#pluginRace(
-      plugin,
-      () => plugin.enable!(this.#createEnableContext(plugin, signal)),
-      plugin.enableTimeout || this.#options.pluginTimeout,
-    )
+    try {
+      await this.#pluginRace(
+        plugin,
+        () => plugin.enable!(this.#createEnableContext(plugin, signal)),
+        plugin.enableTimeout || this.#options.pluginTimeout,
+      )
+    } catch (error) {
+      // Isolate the failure: roll the plugin back so it isn't left marked as
+      // enabled, report it, and let sibling plugins carry on.
+      this.#enabledPlugins.delete(plugin.name)
+      this.#abortControllers.get(plugin)?.abort()
+      this.#reportPluginError(error, plugin, 'enable')
+    }
   }
 
   async #runPlugin(plugin: Plugin) {
@@ -384,11 +405,16 @@ export default class PluginManager<
 
     this.#ran.add(plugin)
 
-    await this.#pluginRace(
-      plugin,
-      () => plugin.run!(this.#createRunContext(plugin, signal)),
-      this.#options.pluginTimeout,
-    )
+    try {
+      await this.#pluginRace(
+        plugin,
+        () => plugin.run!(this.#createRunContext(plugin, signal)),
+        this.#options.pluginTimeout,
+      )
+    } catch (error) {
+      // Isolate the failure so sibling plugins still run.
+      this.#reportPluginError(error, plugin, 'run')
+    }
   }
 
   #pluginRace(plugin: Plugin, fn: () => Promise<any>, ms?: number) {
