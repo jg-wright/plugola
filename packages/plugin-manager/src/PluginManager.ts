@@ -66,6 +66,11 @@ export default class PluginManager<
 
   /**
    * Used for testing. This will **replace** parts of the context... not add to it.
+   *
+   * @remarks
+   * The returned manager reuses the registered plugins and the dependency graph
+   * but has its own independent runtime state (enabled/ran plugins and abort
+   * controllers), so running it doesn't disturb this one.
    */
   withOptions(
     options: PluginManagerOptions<
@@ -94,7 +99,6 @@ export default class PluginManager<
     })
     pluginManager.#plugins = this.#plugins
     pluginManager.#dependencyGraph = this.#dependencyGraph
-    pluginManager.#abortControllers = this.#abortControllers
     return pluginManager
   }
 

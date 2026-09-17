@@ -526,6 +526,23 @@ test('a circular run dependency throws instead of hanging', async () => {
   await expect(pluginManager.run()).rejects.toThrow(/Circular dependency/)
 })
 
+test('withOptions produces a manager with isolated runtime state', async () => {
+  pluginManager.registerPlugin('p', {
+    enable() {},
+  })
+
+  await pluginManager.enablePlugins(['p'])
+  expect(pluginManager.enabledPlugins).toContain('p')
+
+  const clone = pluginManager.withOptions({})
+  await clone.enablePlugins(['p'])
+  clone.disablePlugins(['p'])
+
+  // Disabling in the clone must not disturb the original.
+  expect(clone.enabledPlugins).not.toContain('p')
+  expect(pluginManager.enabledPlugins).toContain('p')
+})
+
 test('replacing context', async () => {
   const run = vi.fn()
 
