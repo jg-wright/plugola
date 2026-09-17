@@ -18,13 +18,10 @@ export class Handler<E extends Event> {
   }
 
   #filter(event: E) {
-    return (
-      !this.#filterEntries.length ||
-      this.#filterEntries.some(([key, value]) =>
-        typeof value === 'function'
-          ? (value as FilterPredicate<EventClass>)(event)
-          : value === event[key],
-      )
+    return this.#filterEntries.every(([key, value]) =>
+      typeof value === 'function'
+        ? (value as FilterPredicate<EventClass>)(event)
+        : value === event[key],
     )
   }
 }

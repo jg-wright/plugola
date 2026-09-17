@@ -1,9 +1,9 @@
-import { timeout } from '../lang/Signal.js'
+import { setTimeout } from 'node:timers/promises'
 import { beforeEach, describe, expect, Mock, test, vi } from 'vitest'
-import { Bus } from '../Bus.js'
-import { Event, Invocation } from '../Event.js'
-import { CANCEL, type InvocationListenerContext } from '../EventListener.js'
-import type { PluginBroker } from './PluginBroker.js'
+import { Bus } from '../src/Bus.js'
+import { Event, Invocation } from '../src/Event.js'
+import { CANCEL, type InvocationListenerContext } from '../src/EventListener.js'
+import type { PluginBroker } from '../src/Broker/PluginBroker.js'
 
 let brokerA: PluginBroker
 let brokerB: PluginBroker
@@ -12,7 +12,7 @@ beforeEach(() => {
   const bus = new Bus()
   brokerA = bus.broker('a')
   brokerB = bus.broker('b')
-  bus.start()
+  bus.resume()
 })
 
 test('emit', () => {
@@ -49,13 +49,13 @@ test('until', async () => {
   expect(await promise).toEqual(event)
 })
 
-test('stop', () => {
+test('pause', () => {
   const spy = vi.fn()
-  brokerB.stop('a')
+  brokerB.pause('a')
   brokerA.on(TestEvent, spy)
   brokerB.emit(new TestEvent('foo'))
   expect(spy).not.toHaveBeenCalled()
-  brokerB.start('a')
+  brokerB.resume('a')
   expect(spy).toHaveBeenCalled()
 })
 
@@ -70,15 +70,14 @@ describe('invoke', () => {
   let spy: Mock<
     (
       event: TestInvocation,
-      { send, finish }: InvocationListenerContext<typeof TestInvocation>,
+      context: InvocationListenerContext<typeof TestInvocation>,
     ) => void
   >
 
   beforeEach(() => {
-    spy = vi.fn((event, { send, finish }) => {
+    spy = vi.fn((event, { send }) => {
       send(`one ${event.foo}`)
       send(`two ${event.foo}`)
-      finish()
     })
 
     brokerA.register(TestInvocation, spy)
@@ -108,14 +107,12 @@ describe('invoke', () => {
   })
 
   test('multi registers', async () => {
-    brokerA.register(TestInvocation, (_, { finish, send }) => {
+    brokerA.register(TestInvocation, (_, { send }) => {
       send('foo')
-      finish()
     })
 
-    brokerB.register(TestInvocation, (_, { finish, send }) => {
+    brokerB.register(TestInvocation, (_, { send }) => {
       send('bar')
-      finish()
     })
 
     expect(await brokerB.invoke(new TestInvocation('foo')).collect()).toEqual([
@@ -127,15 +124,13 @@ describe('invoke', () => {
   })
 
   test('timeouts', async () => {
-    brokerA.register(
-      TestInvocation,
-      async (event, { finish, send, signal }) => {
-        send(`hello ${event.foo}`)
-        await timeout(1_000, signal)
-        send(`hello again ${event.foo}`)
-        finish()
-      },
-    )
+    brokerA.register(TestInvocation, async (event, { send, signal }) => {
+      send(`hello ${event.foo}`)
+      try {
+        await setTimeout(1_000, null, { signal })
+      } catch (error) {}
+      send(`hello again ${event.foo}`)
+    })
 
     expect(
       await brokerB
@@ -167,9 +162,8 @@ describe('intercept', () => {
 
   test('changing invocations', async () => {
     const spy = vi.fn()
-    brokerA.register(TestInvocation, (event, { finish }) => {
+    brokerA.register(TestInvocation, (event) => {
       spy(event)
-      finish()
     })
     brokerB.intercept(
       TestInvocation,

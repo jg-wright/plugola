@@ -15,18 +15,18 @@ export class DiscriminatedQueue<
     this.#execRecord = execRecord
   }
 
-  addExec<K extends PropertyKey, T>(
+  /**
+   * Registers an executor for a new discriminant, mutating this queue in place
+   * and returning it (widened) rather than allocating a replacement. Mutating is
+   * deliberate: a fresh instance would start out stopped and silently drop the
+   * running state, so a discriminant added after start() would never run.
+   */
+  addExec<K extends PropertyKey, U>(
     type: K,
-    exec: (item: T) => void,
-  ): DiscriminatedQueue<T & { [P in K]: T }> {
-    type NewT = T & { [P in K]: T }
-    return new DiscriminatedQueue<NewT>(
-      {
-        ...this.#execRecord,
-        [type]: exec,
-      },
-      this.items as unknown as DiscriminatedQueueItem<NewT>[],
-    )
+    exec: (item: U) => void,
+  ): DiscriminatedQueue<T & { [P in K]: U }> {
+    ;(this.#execRecord as Record<PropertyKey, (item: any) => void>)[type] = exec
+    return this as unknown as DiscriminatedQueue<T & { [P in K]: U }>
   }
 }
 

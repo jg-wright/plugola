@@ -5,8 +5,11 @@ import type {
   Invocation,
   InvocationClass,
 } from '../Event.js'
-import { CANCEL, type InvocationListenerContext } from '../EventListener.js'
-import { withCounter } from '../lang/Function.js'
+import {
+  CANCEL,
+  type InvocationErrorHandler,
+  type InvocationListenerContext,
+} from '../EventListener.js'
 import { MethodQueue } from '../Queue/MethodQueue.js'
 import { Handler } from './Handler.js'
 import { PluginBroker } from './PluginBroker.js'
@@ -15,7 +18,7 @@ import { PluginBroker } from './PluginBroker.js'
  * The full broker. Only the Bus and internal machinery ever hold one; plugins
  * receive a PluginBroker facade instead. Owns the handler registries + queue,
  * and implements the *inbound* pipe: the bus delivering events/invocations
- * into this broker's local handlers. Note `emit`/`invoke`/`start`/`stop`/`abort`
+ * into this broker's local handlers. Note `emit`/`invoke`/`pause`/`resume`/`abort`
  * here are the bus-driven direction — the identically named PluginBroker
  * methods are the opposite (plugin -> bus) direction, which is exactly why the
  * two can't collapse into one object.
@@ -79,33 +82,44 @@ export class Broker {
     return event
   }
 
-  invoke<T>(
+  /**
+   * Runs every local handler for the invocation and resolves once they have all
+   * settled. Completion is derived from the handlers' own return values: a
+   * filtered-out handler resolves immediately (its `handle` returns `undefined`),
+   * so there's no count to keep in sync and nothing to hang on. The handler set
+   * is snapshotted, so (un)registering during an in-flight invocation can't move
+   * the target. Handlers are isolated: one that throws is routed to
+   * `reportError` and neither stops its siblings nor prevents completion.
+   */
+  async invoke<T>(
     event: Invocation<T>,
     context: InvocationListenerContext<InvocationClass<T>>,
-  ) {
-    if (!this.queue.running) return context.finish()
+    reportError: InvocationErrorHandler,
+  ): Promise<void> {
+    if (!this.queue.running) return
 
     const invokeHandlers = this.invokeHandlers.get(
       event.constructor as InvocationClass<T>,
     )
 
-    if (!invokeHandlers?.size) return context.finish()
+    if (!invokeHandlers?.size) return
 
-    const handlerContext = {
-      ...context,
-      finish: withCounter((counter) => {
-        if (counter >= invokeHandlers.size) context.finish()
+    await Promise.all(
+      Array.from(invokeHandlers, async (handler) => {
+        try {
+          await handler.handle(event, context)
+        } catch (error) {
+          reportError(error)
+        }
       }),
-    } as InvocationListenerContext<InvocationClass<T>>
-
-    for (const handler of invokeHandlers) handler.handle(event, handlerContext)
+    )
   }
 
-  start() {
+  resume() {
     this.queue.start()
   }
 
-  stop() {
+  pause() {
     this.queue.stop()
   }
 
