@@ -36,11 +36,18 @@ export class Broker {
 
   readonly #abortController = new AbortController()
 
+  readonly abortSignal: AbortSignal
+
   constructor(
     readonly bus: Bus,
     readonly name: string,
+    abortSignal?: AbortSignal,
   ) {
-    this.abortSignal.addEventListener('abort', () => {
+    this.abortSignal = abortSignal
+      ? AbortSignal.any([abortSignal, this.#abortController.signal])
+      : this.#abortController.signal
+
+    this.onAbort(() => {
       this.eventHandlers.clear()
       this.invokeHandlers.clear()
     })
@@ -53,12 +60,8 @@ export class Broker {
     })
   }
 
-  get abortSignal(): AbortSignal {
-    return this.#abortController.signal
-  }
-
   onAbort(fn: (reason: any) => any) {
-    this.abortSignal.addEventListener('abort', fn)
+    this.abortSignal.addEventListener('abort', fn, { once: true })
     return () => this.abortSignal.removeEventListener('abort', fn)
   }
 

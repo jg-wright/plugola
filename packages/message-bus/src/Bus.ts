@@ -102,11 +102,11 @@ export class Bus {
    *
    * @throws if a broker with `name` is already registered.
    */
-  broker(name: string) {
+  broker(name: string, abortSignal?: AbortSignal) {
     if (this.#brokers.has(name))
       throw new Error(`Broker "${name}" has already been registered`)
 
-    const broker = new Broker(this, name)
+    const broker = new Broker(this, name, abortSignal)
     this.#brokers.set(name, broker)
 
     broker.onAbort(() => {
