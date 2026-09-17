@@ -469,6 +469,21 @@ test('plugins that time out', async () => {
   expect(abort).toHaveBeenCalledWith('run')
 })
 
+test('a circular run dependency throws instead of hanging', async () => {
+  pluginManager.registerPlugin('a', {
+    dependencies: ['b'],
+    run() {},
+  })
+
+  pluginManager.registerPlugin('b', {
+    dependencies: ['a'],
+    run() {},
+  })
+
+  await pluginManager.enableAllPlugins()
+  await expect(pluginManager.run()).rejects.toThrow(/Circular dependency/)
+})
+
 test('replacing context', async () => {
   const run = vi.fn()
 

@@ -391,11 +391,19 @@ export default class PluginManager<
     }
   }
 
-  async #runPlugin(plugin: Plugin) {
+  async #runPlugin(plugin: Plugin, path: Set<Plugin> = new Set()) {
+    if (path.has(plugin))
+      throw new Error(
+        `Circular dependency detected: ${[...path, plugin]
+          .map((p) => p.name)
+          .join(' -> ')}`,
+      )
+
+    const nextPath = new Set(path).add(plugin)
     await this.#filterMapDependencies(
       plugin,
       (dep) => !this.#ran.has(dep),
-      (dep) => this.#runPlugin(dep),
+      (dep) => this.#runPlugin(dep, nextPath),
     )
 
     if (this.#ran.has(plugin) || !plugin.run) return
