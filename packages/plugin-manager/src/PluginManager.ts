@@ -3,14 +3,47 @@ import { Plugin } from './Plugin.js'
 import { race, timeout } from '@johngw/async'
 import DependencyGraph from './DependencyGraph.js'
 
+/**
+ * Configuration for a {@link PluginManager}.
+ *
+ * The three `add*Context` callbacks let you inject arbitrary values into the
+ * context objects plugins receive. Their return types become the manager's
+ * `ExtraContext` / `ExtraEnableContext` / `ExtraRunContext` type parameters, so
+ * plugins get fully typed context.
+ *
+ * @typeParam ExtraContext - Extra fields merged into *both* the enable and run
+ * context (from {@link addContext}).
+ * @typeParam ExtraEnableContext - Extra fields merged into the enable context
+ * only (from {@link addEnableContext}).
+ * @typeParam ExtraRunContext - Extra fields merged into the run context only
+ * (from {@link addRunContext}).
+ */
 export interface PluginManagerOptions<
   ExtraContext extends Record<string, unknown>,
   ExtraEnableContext extends Record<string, unknown>,
   ExtraRunContext extends Record<string, unknown>,
 > {
+  /**
+   * Returns extra fields merged into every plugin context — both `enable` and
+   * `run`. Called once per hook invocation with the plugin's name.
+   */
   addContext?(pluginName: string): ExtraContext
+  /**
+   * Returns extra fields merged into the `enable` context only. Called with the
+   * plugin's name when its `enable` hook is invoked.
+   */
   addEnableContext?(pluginName: string): ExtraEnableContext
+  /**
+   * Returns extra fields merged into the `run` context only. Called with the
+   * plugin's name when its `run` hook is invoked.
+   */
   addRunContext?(pluginName: string): ExtraRunContext
+  /**
+   * Default milliseconds to wait for a plugin's `enable` or `run` hook before
+   * aborting it. When a hook times out the plugin is disabled and its `signal`
+   * aborts. Omit for no timeout. A plugin can override the enable timeout with
+   * {@link Plugin.enableTimeout}.
+   */
   pluginTimeout?: number
   /**
    * Called when {@link PluginManager.enablePlugins} or
@@ -29,6 +62,33 @@ export interface PluginManagerOptions<
   onPluginError?(error: unknown, plugin: Plugin, phase: 'enable' | 'run'): void
 }
 
+/**
+ * Registers plugins, resolves their dependencies, and drives them through a
+ * two-phase lifecycle: **enable** (activate a selected set of plugins and their
+ * dependencies) and **run** (invoke each enabled plugin's work). Within each
+ * phase plugins run concurrently, but a plugin's dependencies always complete
+ * before the plugin itself.
+ *
+ * Typical flow:
+ *
+ * ```typescript
+ * const pm = new PluginManager()
+ * pm.registerPlugin('greeter', { run: () => console.log('hi') })
+ * await pm.enablePlugins(['greeter'])
+ * await pm.run()
+ * ```
+ *
+ * Plugin failures are isolated: a hook that throws is rolled back (for `enable`)
+ * and reported via the `onPluginError` option rather than taking down its
+ * siblings.
+ *
+ * @typeParam ExtraContext - Extra context injected into both hooks, from the
+ * `addContext` option.
+ * @typeParam ExtraEnableContext - Extra context injected into `enable`, from the
+ * `addEnableContext` option.
+ * @typeParam ExtraRunContext - Extra context injected into `run`, from the
+ * `addRunContext` option.
+ */
 export default class PluginManager<
   ExtraContext extends Record<string, unknown>,
   ExtraEnableContext extends Record<string, unknown>,
@@ -50,6 +110,10 @@ export default class PluginManager<
     ExtraRunContext
   >
 
+  /**
+   * @param options - Context injectors and lifecycle behaviour. See
+   * {@link PluginManagerOptions}.
+   */
   constructor(
     options: PluginManagerOptions<
       ExtraContext,
@@ -60,17 +124,28 @@ export default class PluginManager<
     this.#options = options
   }
 
+  /** Names of the currently enabled plugins, as a new array. */
   get enabledPlugins() {
     return [...this.#enabledPlugins]
   }
 
   /**
-   * Used for testing. This will **replace** parts of the context... not add to it.
+   * Create a sibling manager that shares this one's registered plugins but takes
+   * new options — primarily for testing, where you want to **replace** parts of
+   * the injected context rather than add to it.
    *
    * @remarks
+   * The extra-context callbacks are layered: for each plugin the returned
+   * manager first calls this manager's `add*Context`, then the ones passed here,
+   * so overlapping keys from `options` win.
+   *
    * The returned manager reuses the registered plugins and the dependency graph
    * but has its own independent runtime state (enabled/ran plugins and abort
    * controllers), so running it doesn't disturb this one.
+   *
+   * @param options - Options for the sibling manager. Its `add*Context`
+   * callbacks are merged over this manager's.
+   * @returns A new {@link PluginManager} sharing this one's plugins.
    */
   withOptions(
     options: PluginManagerOptions<
@@ -102,6 +177,14 @@ export default class PluginManager<
     return pluginManager
   }
 
+  /**
+   * Register a plugin whose `name` is a property of the object.
+   *
+   * @remarks
+   * Registration order doesn't matter: a plugin may be registered before the
+   * dependencies it names, and the manager wires the edges up once they appear.
+   * Registering a name that already exists replaces the previous plugin.
+   */
   registerPlugin(
     plugin: Plugin<
       EnableContext & ExtraContext & ExtraEnableContext,
@@ -109,6 +192,15 @@ export default class PluginManager<
     >,
   ): void
 
+  /**
+   * Register a plugin under an explicit `name`, with the plugin definition
+   * supplied separately (without its own `name` field).
+   *
+   * @remarks
+   * Registration order doesn't matter: a plugin may be registered before the
+   * dependencies it names, and the manager wires the edges up once they appear.
+   * Registering a name that already exists replaces the previous plugin.
+   */
   registerPlugin(
     name: string,
     plugin: Omit<
@@ -194,6 +286,13 @@ export default class PluginManager<
     else this.#dependencyGraph.addDependency(source, dependency)
   }
 
+  /**
+   * Invoke the `run` hook of every enabled plugin. Each plugin runs after its
+   * dependencies (and its enabled optional dependencies) have run, and each runs
+   * at most once. Resolves when all enabled plugins have finished running.
+   *
+   * @throws If the enabled plugins contain a circular `run` dependency.
+   */
   async run() {
     let promises: Promise<void>[] = []
     for (const pluginName of this.#enabledPlugins)
@@ -201,10 +300,25 @@ export default class PluginManager<
     await Promise.all(promises)
   }
 
+  /** Enable every registered plugin. */
   async enableAllPlugins() {
     await this.enablePlugins(Object.keys(this.#plugins))
   }
 
+  /**
+   * Enable the named plugins and their dependencies.
+   *
+   * @remarks
+   * The names form a single enable batch. Hard dependencies are always enabled;
+   * an optional dependency is only enabled if it is named in the same batch. A
+   * plugin's `enable` hook runs after its dependencies are enabled. Unknown
+   * names throw unless an `onUnknownPlugin` option is provided. Enabling an
+   * already-enabled plugin is a no-op.
+   *
+   * Bound as a field so it can be passed directly into plugin enable contexts.
+   *
+   * @param pluginNames - Names of the plugins to enable.
+   */
   readonly enablePlugins = async (pluginNames: string[]) => {
     await this.#enablePlugins(new Set(pluginNames))
   }
@@ -266,14 +380,22 @@ export default class PluginManager<
   }
 
   /**
-   * Disable plugins, by name.
+   * Disable the named plugins.
    *
    * @remarks
-   * By default, the method will cautiously remove plugins. IE, if they're depended
-   * on by other plugins it will **not** be disabled.
+   * By default this removes plugins cautiously: a plugin that is still depended
+   * on by another enabled plugin is **not** disabled. Pass `force` to disable a
+   * plugin along with everything that depends on it. Disabling a plugin also
+   * disables any of its dependencies that nothing else needs (dependencies are
+   * never force-disabled). Disabling aborts each removed plugin's `signal`.
    *
-   * However, you can force a plugin, and it's dependers, to be disabled by passing
-   * the force flag.
+   * Unknown names throw unless an `onUnknownPlugin` option is provided.
+   *
+   * Bound as a field so it can be passed directly into plugin enable contexts.
+   *
+   * @param pluginNames - Names of the plugins to disable.
+   * @param force - When true, also disable plugins that depend on the named ones.
+   * @returns The number of plugins actually disabled.
    */
   readonly disablePlugins = (pluginNames: string[], force = false) => {
     return pluginNames.reduce((disabled, pluginName) => {
@@ -286,6 +408,12 @@ export default class PluginManager<
     }, 0)
   }
 
+  /**
+   * Disable every registered plugin (cautiously — see
+   * {@link PluginManager.disablePlugins}).
+   *
+   * @returns The number of plugins actually disabled.
+   */
   disableAllPlugins() {
     return this.disablePlugins(Object.keys(this.#plugins))
   }
