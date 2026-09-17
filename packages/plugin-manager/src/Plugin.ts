@@ -1,6 +1,6 @@
 export interface Plugin<
-  EC extends Record<string, unknown> = any,
-  RC extends Record<string, unknown> = any,
+  EC extends Record<string, unknown> = Record<string, unknown>,
+  RC extends Record<string, unknown> = Record<string, unknown>,
 > {
   name: string
   dependencies?: string[]
