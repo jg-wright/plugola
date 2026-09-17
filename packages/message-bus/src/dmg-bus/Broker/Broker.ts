@@ -23,15 +23,9 @@ import { PluginBroker } from './PluginBroker.js'
 export class Broker {
   readonly eventHandlers = new Map<EventClass, Set<Handler<Event>>>()
 
-  readonly invokeHandlers = new Map<
-    InvocationClass<unknown>,
-    Set<Handler<Invocation<unknown>>>
-  >()
+  readonly invokeHandlers = new Map<InvocationClass, Set<Handler<Invocation>>>()
 
-  readonly interceptionHandlers = new Map<
-    EventClass,
-    Set<Handler<Event, any>>
-  >()
+  readonly interceptionHandlers = new Map<EventClass, Set<Handler<Event>>>()
 
   readonly queue = new MethodQueue()
 
@@ -65,7 +59,7 @@ export class Broker {
     return () => this.abortSignal.removeEventListener('abort', fn)
   }
 
-  async intercept<E extends EventClass | InvocationClass<unknown>>(
+  async intercept<E extends EventClass | InvocationClass>(
     event: InstanceType<E>,
   ): Promise<InstanceType<E> | typeof CANCEL> {
     if (!this.queue.running) return event

@@ -269,7 +269,7 @@ export class PluginBroker {
   }
 
   #addListener<E extends EventClass, F extends (...args: any) => any>(
-    registry: Map<E, Set<Handler<InstanceType<E>, any>>>,
+    registry: Map<E, Set<Handler<InstanceType<E>>>>,
     subscribe: (broker: this, eventClass: E) => () => void,
     eventClass: E,
     filterOrEventListener: Filter<E> | F,

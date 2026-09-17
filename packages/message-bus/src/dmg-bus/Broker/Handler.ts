@@ -1,19 +1,19 @@
 import type { Event, EventClass } from '../Event.js'
 import type { Filter, FilterEntries, FilterPredicate } from '../Filter.js'
 
-export class Handler<E extends Event, R = void> {
+export class Handler<E extends Event> {
   readonly #filterEntries: FilterEntries<EventClass>
-  readonly #listener: (event: E, ...args: unknown[]) => R
+  readonly #listener: (event: E, ...args: unknown[]) => any
 
   constructor(
     filter: Filter<EventClass>,
-    listener: (event: E, ...args: unknown[]) => R,
+    listener: (event: E, ...args: unknown[]) => any,
   ) {
     this.#filterEntries = Object.entries(filter) as FilterEntries<EventClass>
     this.#listener = listener
   }
 
-  handle(event: E, ...args: unknown[]): R | void {
+  handle(event: E, ...args: unknown[]): any | void {
     if (this.#filter(event)) return this.#listener(event, ...args)
   }
 
