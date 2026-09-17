@@ -8,9 +8,8 @@ import type {
 import { CANCEL, type InvocationListenerContext } from '../EventListener.js'
 import { withCounter } from '../lang/Function.js'
 import { MethodQueue } from '../Queue/MethodQueue.js'
-import type { EventHandler } from './EventHandler.js'
-import type { InterceptionHandler } from './InterceptionHandler.js'
-import type { InvocationHandler } from './InvocationHandler.js'
+import { Handler } from './Handler.js'
+import { PluginBroker } from './PluginBroker.js'
 
 /**
  * The full broker. Only the Bus and internal machinery ever hold one; plugins
@@ -22,16 +21,16 @@ import type { InvocationHandler } from './InvocationHandler.js'
  * two can't collapse into one object.
  */
 export class Broker {
-  readonly eventHandlers = new Map<EventClass, Set<EventHandler>>()
+  readonly eventHandlers = new Map<EventClass, Set<Handler<Event>>>()
 
   readonly invokeHandlers = new Map<
     InvocationClass<unknown>,
-    Set<InvocationHandler>
+    Set<Handler<Invocation<unknown>>>
   >()
 
   readonly interceptionHandlers = new Map<
     EventClass,
-    Set<InterceptionHandler>
+    Set<Handler<Event, any>>
   >()
 
   readonly queue = new MethodQueue()
@@ -118,5 +117,9 @@ export class Broker {
 
   abort(reason?: unknown) {
     this.#abortController.abort(reason)
+  }
+
+  createPluginFacade() {
+    return new PluginBroker(this)
   }
 }

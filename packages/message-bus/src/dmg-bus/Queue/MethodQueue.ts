@@ -10,8 +10,8 @@ export class MethodQueue implements Runnable {
     const type = Symbol()
     const { promise, resolve } = Promise.withResolvers<Awaited<R>>()
 
-    this.#queue = this.#queue.addExec(type, (item: { args: unknown[] }) => {
-      resolve(method(...(item.args as Args)) as Awaited<R>)
+    this.#queue = this.#queue.addExec(type, (item: { args: Args }) => {
+      resolve(method(...item.args) as Awaited<R>)
     }) as any
 
     return (...args) => {

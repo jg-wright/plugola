@@ -15,10 +15,7 @@ import {
 import type { Filter } from '../Filter.js'
 import { getOrInsert } from '../lang/Map.js'
 import type { Broker } from './Broker.js'
-import { EventHandler } from './EventHandler.js'
-import type { Handler } from './Handler.js'
-import { InterceptionHandler } from './InterceptionHandler.js'
-import { InvocationHandler } from './InvocationHandler.js'
+import { Handler } from './Handler.js'
 
 export class PluginBroker {
   readonly #broker: Broker
@@ -29,27 +26,6 @@ export class PluginBroker {
   ) => void
 
   readonly emit: <E extends Event>(event: E) => Promise<E | typeof CANCEL>
-
-  get name() {
-    return this.#broker.name
-  }
-
-  get abortSignal(): AbortSignal {
-    return this.#broker.abortSignal
-  }
-
-  get aborted() {
-    return this.abortSignal.aborted
-  }
-
-  get abortReason() {
-    return this.abortSignal.reason
-  }
-
-  onAbort(fn: (reason: any) => any) {
-    this.abortSignal.addEventListener('abort', fn)
-    return () => this.abortSignal.removeEventListener('abort', fn)
-  }
 
   constructor(broker: Broker) {
     this.#broker = broker
@@ -72,6 +48,27 @@ export class PluginBroker {
     this.emit = broker.queue.queueMethod(<E extends Event>(event: E) =>
       this.#broker.bus.emit(event),
     )
+  }
+
+  get name() {
+    return this.#broker.name
+  }
+
+  get abortSignal(): AbortSignal {
+    return this.#broker.abortSignal
+  }
+
+  get aborted() {
+    return this.abortSignal.aborted
+  }
+
+  get abortReason() {
+    return this.abortSignal.reason
+  }
+
+  onAbort(fn: (reason: any) => any) {
+    this.abortSignal.addEventListener('abort', fn, { once: true })
+    return () => this.abortSignal.removeEventListener('abort', fn)
   }
 
   start(name: string) {
@@ -103,7 +100,6 @@ export class PluginBroker {
     eventListener?: EventListener<E>,
   ): () => void {
     return this.#addListener(
-      (filter, listener) => new EventHandler(filter, listener),
       this.#broker.eventHandlers,
       this.#broker.bus.on,
       eventClass,
@@ -169,9 +165,8 @@ export class PluginBroker {
     listener?: InvocationListener<E>,
   ): () => void {
     return this.#addListener(
-      (filter, listener) => new InvocationHandler(filter, listener),
       this.#broker.invokeHandlers,
-      this.#broker.bus.register as any,
+      this.#broker.bus.register,
       eventClass,
       filterOrListener,
       listener,
@@ -195,7 +190,6 @@ export class PluginBroker {
     listener?: InterceptionListener<E>,
   ): () => void {
     return this.#addListener(
-      (filter, listener) => new InterceptionHandler(filter, listener),
       this.#broker.interceptionHandlers,
       this.#broker.bus.intercept,
       eventClass,
@@ -274,23 +268,18 @@ export class PluginBroker {
     }
   }
 
-  #addListener<
-    H extends Handler,
-    E extends EventClass,
-    F extends (...args: any[]) => any,
-  >(
-    createHandler: (filter: Filter<E>, eventListener: F) => H,
-    registry: Map<EventClass, Set<H>>,
-    subscribe: (broker: this, eventClass: EventClass) => () => void,
-    eventClass: EventClass,
-    filterOrEventListener: Filter<EventClass> | F,
+  #addListener<E extends EventClass, F extends (...args: any) => any>(
+    registry: Map<E, Set<Handler<InstanceType<E>, any>>>,
+    subscribe: (broker: this, eventClass: E) => () => void,
+    eventClass: E,
+    filterOrEventListener: Filter<E> | F,
     eventListener?: F,
   ) {
     const filter = (eventListener ? filterOrEventListener : {}) as Filter<E>
     eventListener ??= filterOrEventListener as F
 
     const handlers = getOrInsert(registry, eventClass, new Set())
-    const handler = createHandler(filter, eventListener)
+    const handler = new Handler(filter, eventListener)
     handlers.add(handler)
 
     const unregister = subscribe(this, eventClass)

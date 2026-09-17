@@ -6,13 +6,54 @@ import { withCounter } from './lang/Function.js'
 import { getOrInsert } from './lang/Map.js'
 
 export class Bus {
-  #brokers = new Map<string, Broker>()
+  readonly #brokers = new Map<string, Broker>()
 
-  #eventBrokers = new Map<EventClass, Set<string>>()
+  readonly #eventBrokers = new Map<EventClass, Set<string>>()
 
-  #invokeBrokers = new Map<InvocationClass<unknown>, Set<string>>()
+  readonly #invokeBrokers = new Map<InvocationClass<unknown>, Set<string>>()
 
-  #interceptBrokers = new Map<EventClass, Set<string>>()
+  readonly #interceptBrokers = new Map<EventClass, Set<string>>()
+
+  readonly on = <E extends EventClass>(
+    broker: PluginBroker,
+    eventClass: E,
+  ): (() => void) => {
+    const eventBrokers = getOrInsert(this.#eventBrokers, eventClass, new Set())
+    eventBrokers.add(broker.name)
+    return () => {
+      this.#eventBrokers.get(eventClass)?.delete(broker.name)
+    }
+  }
+
+  readonly register = <T>(
+    broker: PluginBroker,
+    eventClass: InvocationClass<T>,
+  ): (() => void) => {
+    const invokeBrokers = getOrInsert(
+      this.#invokeBrokers,
+      eventClass,
+      new Set(),
+    )
+    invokeBrokers.add(broker.name)
+    return () => {
+      this.#invokeBrokers.get(eventClass)?.delete(broker.name)
+    }
+  }
+
+  readonly intercept = (
+    broker: PluginBroker,
+    eventClass: EventClass,
+  ): (() => void) => {
+    const interceptBrokers = getOrInsert(
+      this.#interceptBrokers,
+      eventClass,
+      new Set(),
+    )
+    interceptBrokers.add(broker.name)
+    return () => {
+      this.#interceptBrokers.get(eventClass)?.delete(broker.name)
+    }
+  }
 
   broker(name: string) {
     if (this.#brokers.has(name))
@@ -29,18 +70,7 @@ export class Bus {
         brokerNames.delete(name)
     })
 
-    return new PluginBroker(broker)
-  }
-
-  on = <E extends EventClass>(
-    broker: PluginBroker,
-    eventClass: E,
-  ): (() => void) => {
-    const eventBrokers = getOrInsert(this.#eventBrokers, eventClass, new Set())
-    eventBrokers.add(broker.name)
-    return () => {
-      this.#eventBrokers.get(eventClass)?.delete(broker.name)
-    }
+    return broker.createPluginFacade()
   }
 
   async emit<E extends Event>(event: E): Promise<E | typeof CANCEL> {
@@ -59,33 +89,6 @@ export class Bus {
     for (const name of eventBrokers) this.#brokers.get(name)?.emit(event)
 
     return event
-  }
-
-  register = <T>(
-    broker: PluginBroker,
-    eventClass: InvocationClass<T>,
-  ): (() => void) => {
-    const invokeBrokers = getOrInsert(
-      this.#invokeBrokers,
-      eventClass,
-      new Set(),
-    )
-    invokeBrokers.add(broker.name)
-    return () => {
-      this.#invokeBrokers.get(eventClass)?.delete(broker.name)
-    }
-  }
-
-  intercept = (broker: PluginBroker, eventClass: EventClass): (() => void) => {
-    const interceptBrokers = getOrInsert(
-      this.#interceptBrokers,
-      eventClass,
-      new Set(),
-    )
-    interceptBrokers.add(broker.name)
-    return () => {
-      this.#interceptBrokers.get(eventClass)?.delete(broker.name)
-    }
   }
 
   invoke<T>(
