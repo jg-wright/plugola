@@ -21,6 +21,10 @@ export default class PluginManager<
 > {
   #plugins: Record<string, Plugin> = {}
   #dependencyGraph = new DependencyGraph<Plugin>()
+  #pendingDependencies = new Map<
+    string,
+    { source: Plugin; optional: boolean }[]
+  >()
   #ran = new WeakSet<Plugin>()
   #abortControllers = new WeakMap<Plugin, AbortController>()
   #pendingBatches = new Set<Set<string>>()
@@ -125,15 +129,50 @@ export default class PluginManager<
   #addPlugin(plugin: Plugin) {
     this.#plugins[plugin.name] = plugin
     this.#dependencyGraph.vertex(plugin)
+
     if (plugin.dependencies)
       for (const dependency of plugin.dependencies)
-        this.#dependencyGraph.addDependency(plugin, this.#getPlugin(dependency))
+        this.#addDependencyEdge(plugin, dependency, false)
+
     if (plugin.optionalDependencies)
       for (const dependency of plugin.optionalDependencies)
-        this.#dependencyGraph.addOptionalDependency(
-          plugin,
-          this.#getPlugin(dependency),
-        )
+        this.#addDependencyEdge(plugin, dependency, true)
+
+    // Wire up any plugins that were registered before this one and depend on it.
+    this.#resolvePendingDependencies(plugin)
+  }
+
+  #addDependencyEdge(
+    source: Plugin,
+    dependencyName: string,
+    optional: boolean,
+  ) {
+    const dependency = this.#plugins[dependencyName]
+
+    // Registration order shouldn't matter: if the dependency isn't registered
+    // yet, remember the edge and wire it when the dependency shows up.
+    if (!dependency) {
+      const pending = this.#pendingDependencies.get(dependencyName) ?? []
+      pending.push({ source, optional })
+      this.#pendingDependencies.set(dependencyName, pending)
+      return
+    }
+
+    this.#wireDependency(source, dependency, optional)
+  }
+
+  #resolvePendingDependencies(dependency: Plugin) {
+    const pending = this.#pendingDependencies.get(dependency.name)
+    if (!pending) return
+    this.#pendingDependencies.delete(dependency.name)
+    for (const { source, optional } of pending)
+      this.#wireDependency(source, dependency, optional)
+  }
+
+  #wireDependency(source: Plugin, dependency: Plugin, optional: boolean) {
+    if (optional)
+      this.#dependencyGraph.addOptionalDependency(source, dependency)
+    else this.#dependencyGraph.addDependency(source, dependency)
   }
 
   async run() {

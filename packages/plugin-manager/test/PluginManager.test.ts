@@ -106,6 +106,26 @@ test('an optional dependency is enabled before its depender, even alongside hard
   expect(pluginManager.enabledPlugins).toContain('opt')
 })
 
+test('a plugin can be registered before its dependency', async () => {
+  let result = ''
+
+  pluginManager.registerPlugin('dependent', {
+    dependencies: ['dependency'],
+    enable() {
+      result += 'dependent'
+    },
+  })
+
+  pluginManager.registerPlugin('dependency', {
+    enable() {
+      result += 'dependency'
+    },
+  })
+
+  await pluginManager.enablePlugins(['dependent'])
+  expect(result).toBe('dependencydependent')
+})
+
 test('running normal plugins', async () => {
   let result: string
 
