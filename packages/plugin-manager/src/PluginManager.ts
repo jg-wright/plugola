@@ -12,6 +12,14 @@ export interface PluginManagerOptions<
   addEnableContext?(pluginName: string): ExtraEnableContext
   addRunContext?(pluginName: string): ExtraRunContext
   pluginTimeout?: number
+  /**
+   * Called when {@link PluginManager.enablePlugins} or
+   * {@link PluginManager.disablePlugins} is given a plugin name that isn't
+   * registered. Defaults to throwing. Provide a handler to log, collect, or
+   * otherwise tolerate unknown plugins — if it doesn't throw, the name is
+   * skipped.
+   */
+  onUnknownPlugin?(pluginName: string, phase: 'enable' | 'disable'): void
 }
 
 export default class PluginManager<
@@ -214,11 +222,9 @@ export default class PluginManager<
         toEnable.delete(pluginName)
         if (this.#enabledPlugins.has(pluginName)) continue
 
-        let plugin: Plugin
-        try {
-          plugin = this.#getPlugin(pluginName)
-        } catch (error: any) {
-          console.warn(error.message)
+        const plugin = this.#plugins[pluginName]
+        if (!plugin) {
+          this.#handleUnknownPlugin(pluginName, 'enable')
           continue
         }
 
@@ -259,11 +265,14 @@ export default class PluginManager<
    * the force flag.
    */
   readonly disablePlugins = (pluginNames: string[], force = false) => {
-    return pluginNames.reduce(
-      (disabled, pluginName) =>
-        disabled + this.#disablePlugin(this.#getPlugin(pluginName), force),
-      0,
-    )
+    return pluginNames.reduce((disabled, pluginName) => {
+      const plugin = this.#plugins[pluginName]
+      if (!plugin) {
+        this.#handleUnknownPlugin(pluginName, 'disable')
+        return disabled
+      }
+      return disabled + this.#disablePlugin(plugin, force)
+    }, 0)
   }
 
   disableAllPlugins() {
@@ -312,6 +321,12 @@ export default class PluginManager<
     if (!this.#plugins[pluginName])
       throw new Error(`The plugin "${pluginName}" isn't registered.`)
     return this.#plugins[pluginName]
+  }
+
+  #handleUnknownPlugin(pluginName: string, phase: 'enable' | 'disable') {
+    if (this.#options.onUnknownPlugin)
+      this.#options.onUnknownPlugin(pluginName, phase)
+    else throw new Error(`The plugin "${pluginName}" isn't registered.`)
   }
 
   #abortController(plugin: Plugin) {

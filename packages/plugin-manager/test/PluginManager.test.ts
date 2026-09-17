@@ -379,6 +379,26 @@ describe('disabling plugins', () => {
   })
 })
 
+test('enabling or disabling an unknown plugin throws by default', async () => {
+  await expect(pluginManager.enablePlugins(['nope'])).rejects.toThrow(
+    'The plugin "nope" isn\'t registered.',
+  )
+  expect(() => pluginManager.disablePlugins(['nope'])).toThrow(
+    'The plugin "nope" isn\'t registered.',
+  )
+})
+
+test('onUnknownPlugin handles unregistered plugins instead of throwing', async () => {
+  const onUnknownPlugin = vi.fn<(name: string, phase: string) => void>()
+  const pluginManager = new PluginManager({ onUnknownPlugin })
+
+  await pluginManager.enablePlugins(['nope'])
+  expect(pluginManager.disablePlugins(['nope'])).toBe(0)
+
+  expect(onUnknownPlugin).toHaveBeenCalledWith('nope', 'enable')
+  expect(onUnknownPlugin).toHaveBeenCalledWith('nope', 'disable')
+})
+
 test('plugins that time out', async () => {
   const abort = vi.fn<(reason: string) => void>()
 
