@@ -168,6 +168,48 @@ test('running with a dependency tree', async () => {
   expect(result).toBe('foobarmung')
 })
 
+test('run() waits for an enabled optional dependency', async () => {
+  const order: string[] = []
+
+  pluginManager.registerPlugin('opt', {
+    async run() {
+      await timeout(10)
+      order.push('opt')
+    },
+  })
+
+  pluginManager.registerPlugin('mung', {
+    optionalDependencies: ['opt'],
+    run() {
+      order.push('mung')
+    },
+  })
+
+  await pluginManager.enablePlugins(['mung', 'opt'])
+  await pluginManager.run()
+
+  expect(order).toEqual(['opt', 'mung'])
+})
+
+test('run() does not wait for an optional dependency that is not enabled', async () => {
+  const mung = vi.fn()
+
+  pluginManager.registerPlugin('opt', {
+    run() {},
+  })
+
+  pluginManager.registerPlugin('mung', {
+    optionalDependencies: ['opt'],
+    run: mung,
+  })
+
+  // opt is registered but not enabled, so it must not gate mung.
+  await pluginManager.enablePlugins(['mung'])
+  await pluginManager.run()
+
+  expect(mung).toHaveBeenCalled()
+})
+
 test('extra context', async () => {
   const pluginManager = new PluginManager({
     addContext(pluginName) {

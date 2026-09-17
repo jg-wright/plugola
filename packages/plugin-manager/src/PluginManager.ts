@@ -400,11 +400,7 @@ export default class PluginManager<
       )
 
     const nextPath = new Set(path).add(plugin)
-    await this.#filterMapDependencies(
-      plugin,
-      (dep) => !this.#ran.has(dep),
-      (dep) => this.#runPlugin(dep, nextPath),
-    )
+    await this.#runDependencies(plugin, nextPath)
 
     if (this.#ran.has(plugin) || !plugin.run) return
 
@@ -439,15 +435,24 @@ export default class PluginManager<
         )
   }
 
-  async #filterMapDependencies(
-    plugin: Plugin,
-    filter: (plugin: Plugin) => boolean,
-    map: (plugin: Plugin) => Promise<any>,
-  ) {
-    const promises = []
+  /**
+   * Run a plugin's dependencies before the plugin itself: all of its hard
+   * dependencies, plus any optional dependency that is currently enabled.
+   * Disabled optional dependencies are skipped — they don't gate the run.
+   */
+  async #runDependencies(plugin: Plugin, path: Set<Plugin>) {
+    const dependencies = new Set([
+      ...this.#dependencyGraph.dependencies(plugin),
+      ...this.#dependencyGraph.optionalDependencies(plugin),
+    ])
 
-    for (const dep of this.#dependencyGraph.dependencies(plugin))
-      if (filter(dep)) promises.push(map(dep))
+    const promises: Promise<void>[] = []
+    for (const dependency of dependencies)
+      if (
+        !this.#ran.has(dependency) &&
+        this.#enabledPlugins.has(dependency.name)
+      )
+        promises.push(this.#runPlugin(dependency, path))
 
     await Promise.all(promises)
   }
