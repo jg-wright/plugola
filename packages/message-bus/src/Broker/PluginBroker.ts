@@ -1,3 +1,4 @@
+import { UnderlyingDefaultSource } from 'node:stream/web'
 import type {
   Event,
   EventClass,
@@ -7,11 +8,11 @@ import type {
 } from '../Event.js'
 import {
   CANCEL,
-  EventListener,
-  InterceptionListener,
-  InvocationErrorHandler,
-  InvocationListener,
-  InvocationListenerContext,
+  type EventListener,
+  type InterceptionListener,
+  type InvocationErrorHandler,
+  type InvocationListener,
+  type InvocationListenerContext,
 } from '../EventListener.js'
 import type { Filter } from '../Filter.js'
 import { getOrInsert } from '../lang/Map.js'
@@ -321,7 +322,9 @@ export class PluginBroker {
     event: E,
     {
       signal,
-      onError,
+      onError = (error) => {
+        throw error
+      },
     }: {
       signal?: AbortSignal
       onError?: InvocationErrorHandler
@@ -332,75 +335,12 @@ export class PluginBroker {
   } {
     type T = InvocationType<E>
 
-    const self = this
-    const producer = new AbortController()
-    let settled = false
-    let teardown = (_reason?: any) => {}
-
-    // Without an onError observer, an unobserved handler error rethrows and so
-    // surfaces on the stream (fail-loud). Supplying onError isolates handlers:
-    // errors are reported there and the stream still completes.
-    const reportError: InvocationErrorHandler =
-      onError ??
-      ((error) => {
-        throw error
-      })
-
-    const readableStream = new ReadableStream<T>({
-      start: (controller) => {
-        const offAbort = this.onAbort(abort)
-        signal?.addEventListener('abort', close)
-
-        teardown = (reason?: any) => {
-          if (settled) return
-          settled = true
-          offAbort()
-          signal?.removeEventListener('abort', close)
-          producer.abort(reason)
-        }
-
-        if (this.aborted) return abort()
-        if (signal?.aborted) return close()
-
-        // Completion is the settling of #invoke's promise: it resolves once
-        // every handler across every broker has returned, and rejects if one
-        // of them threw.
-        this.#invoke(
-          event,
-          {
-            send: (value: unknown) => {
-              if (settled) return
-              controller.enqueue(value as T)
-            },
-            signal: producer.signal,
-          },
-          reportError,
-        ).then(close, fail)
-
-        function close() {
-          if (settled) return
-          teardown(signal?.reason)
-          controller.close()
-        }
-
-        function abort() {
-          if (settled) return
-          teardown(self.abortReason)
-          controller.error(self.abortReason)
-        }
-
-        function fail(error: unknown) {
-          if (settled) return
-          teardown(error)
-          controller.error(error)
-        }
-      },
-
-      cancel: (reason) => teardown(reason),
-    })
+    const readableStream = new ReadableStream(
+      new InvocationSource(this, event, this.#invoke, onError, signal),
+    )
 
     return {
-      async collect() {
+      collect: async () => {
         const items: T[] = []
         for await (const item of readableStream) items.push(item)
         return items
@@ -430,5 +370,79 @@ export class PluginBroker {
       handlers?.delete(handler)
       if (!handlers?.size) unregister()
     }
+  }
+}
+
+class InvocationSource<
+  E extends Invocation<unknown>,
+> implements UnderlyingDefaultSource<InvocationType<E>> {
+  #producer = new AbortController()
+  #settled = false
+  #teardown = (_reason: any) => {}
+
+  constructor(
+    private readonly pluginBroker: PluginBroker,
+    private readonly event: E,
+    private readonly invoke: (
+      event: E,
+      params: InvocationListenerContext<InvocationClass>,
+      reportError: InvocationErrorHandler,
+    ) => Promise<void>,
+    private readonly onError: InvocationErrorHandler,
+    private readonly signal?: AbortSignal,
+  ) {}
+
+  start(controller: ReadableStreamDefaultController<InvocationType<E>>) {
+    const offAbort = this.pluginBroker.onAbort(() => this.#abort(controller))
+    const close = () => this.#close(controller)
+    this.signal?.addEventListener('abort', close, { once: true })
+
+    this.#teardown = (reason: any) => {
+      if (this.#settled) return
+      this.#settled = true
+      offAbort()
+      this.signal?.removeEventListener('abort', close)
+      this.#producer.abort(reason)
+    }
+
+    if (this.pluginBroker.aborted) return this.#abort(controller)
+    if (this.signal?.aborted) return this.#close(controller)
+
+    // Completion is the settling of #invoke's promise: it resolves once
+    // every handler across every broker has returned, and rejects if one
+    // of them threw.
+    this.invoke(
+      this.event,
+      {
+        send: (value: unknown) => {
+          if (this.#settled) return
+          controller.enqueue(value as InvocationType<E>)
+        },
+        signal: this.#producer.signal,
+      },
+      this.onError,
+    ).then(
+      () => this.#close(controller),
+      (reason: any) => this.#abort(controller, reason),
+    )
+  }
+
+  cancel(reason: any) {
+    this.#teardown(reason)
+  }
+
+  #close(controller: ReadableStreamDefaultController<InvocationType<E>>) {
+    if (this.#settled) return
+    this.#teardown(this.signal?.reason)
+    controller.close()
+  }
+
+  #abort(
+    controller: ReadableStreamDefaultController<InvocationType<E>>,
+    reason = this.pluginBroker.abortReason,
+  ) {
+    if (this.#settled) return
+    this.#teardown(reason)
+    controller.error(reason)
   }
 }
