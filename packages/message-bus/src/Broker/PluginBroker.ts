@@ -18,6 +18,7 @@ import type { Filter } from '../Filter.js'
 import { getOrInsert } from '../lang/Map.js'
 import type { Broker } from './Broker.js'
 import { Handler } from './Handler.js'
+import { onAbort } from '../lang/AbortSignal.js'
 
 /**
  * A participant's handle on the {@link Bus} — what `bus.broker(name)` returns.
@@ -81,23 +82,12 @@ export class PluginBroker {
     return this.#broker.abortSignal
   }
 
-  /** Whether this broker has been aborted. */
-  get aborted() {
-    return this.abortSignal.aborted
-  }
-
-  /** The reason passed to the abort that tore this broker down, if any. */
-  get abortReason() {
-    return this.abortSignal.reason
-  }
-
   /**
    * Runs `fn` once, when this broker is aborted (immediately if it already has).
    * Returns a disposer that removes the listener.
    */
   onAbort(fn: (reason: any) => any) {
-    this.abortSignal.addEventListener('abort', fn, { once: true })
-    return () => this.abortSignal.removeEventListener('abort', fn)
+    return onAbort(fn, this.abortSignal)
   }
 
   /**
@@ -209,13 +199,12 @@ export class PluginBroker {
     filter: Filter<E> = {},
   ): Promise<InstanceType<E>> {
     return new Promise((resolve, reject) => {
-      const onAbort = () => reject(this.abortSignal.reason)
-      if (this.abortSignal.aborted) return onAbort()
-      this.abortSignal.addEventListener('abort', onAbort)
-      this.once(eventClass, filter, (event) => {
-        this.abortSignal.removeEventListener('abort', onAbort)
-        resolve(event)
-      })
+      const { aborted, off } = onAbort(reject, this.abortSignal)
+      if (!aborted)
+        this.once(eventClass, filter, (event) => {
+          off()
+          resolve(event)
+        })
     })
   }
 
@@ -376,7 +365,7 @@ export class PluginBroker {
 class InvocationSource<
   E extends Invocation<unknown>,
 > implements UnderlyingDefaultSource<InvocationType<E>> {
-  #producer = new AbortController()
+  readonly #producer = new AbortController()
   #settled = false
   #teardown = (_reason: any) => {}
 
@@ -393,20 +382,26 @@ class InvocationSource<
   ) {}
 
   start(controller: ReadableStreamDefaultController<InvocationType<E>>) {
-    const offAbort = this.pluginBroker.onAbort(() => this.#abort(controller))
-    const close = () => this.#close(controller)
-    this.signal?.addEventListener('abort', close, { once: true })
+    let aborted = false
+    let offAbort = () => {}
+    let offBrokerAbort = () => {}
 
     this.#teardown = (reason: any) => {
       if (this.#settled) return
       this.#settled = true
       offAbort()
-      this.signal?.removeEventListener('abort', close)
+      offBrokerAbort()
       this.#producer.abort(reason)
     }
-
-    if (this.pluginBroker.aborted) return this.#abort(controller)
-    if (this.signal?.aborted) return this.#close(controller)
+    ;({ aborted, off: offBrokerAbort } = this.pluginBroker.onAbort(() =>
+      this.#abort(controller),
+    ))
+    if (aborted) return
+    ;({ aborted, off: offAbort } = onAbort(
+      () => this.#close(controller),
+      this.signal,
+    ))
+    if (aborted) return
 
     // Completion is the settling of #invoke's promise: it resolves once
     // every handler across every broker has returned, and rejects if one
@@ -439,7 +434,7 @@ class InvocationSource<
 
   #abort(
     controller: ReadableStreamDefaultController<InvocationType<E>>,
-    reason = this.pluginBroker.abortReason,
+    reason = this.pluginBroker.abortSignal.reason,
   ) {
     if (this.#settled) return
     this.#teardown(reason)

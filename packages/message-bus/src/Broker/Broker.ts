@@ -10,6 +10,7 @@ import {
   type InvocationErrorHandler,
   type InvocationListenerContext,
 } from '../EventListener.js'
+import { onAbort } from '../lang/AbortSignal.js'
 import { MethodQueue } from '../Queue/MethodQueue.js'
 import { Handler } from './Handler.js'
 import { PluginBroker } from './PluginBroker.js'
@@ -61,8 +62,11 @@ export class Broker {
   }
 
   onAbort(fn: (reason: any) => any) {
-    this.abortSignal.addEventListener('abort', fn, { once: true })
-    return () => this.abortSignal.removeEventListener('abort', fn)
+    return onAbort(fn, this.abortSignal)
+  }
+
+  get aborted() {
+    return this.abortSignal.aborted
   }
 
   async intercept<E extends EventClass | InvocationClass>(
