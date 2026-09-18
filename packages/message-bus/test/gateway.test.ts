@@ -5,7 +5,7 @@ import { Message } from '../src/Message/Message.js'
 import { CommandMessage } from '../src/Message/CommandMessage.js'
 import { CANCEL } from '../src/Roles/Interceptor.js'
 import type { ResponderContext } from '../src/Roles/Responder.js'
-import type { MessageGateway } from '../src/Gateway/MessageGateway.js'
+import type { MessageGateway } from '../src/Participant/MessageGateway.js'
 
 let gatewayA: MessageGateway
 let gatewayB: MessageGateway

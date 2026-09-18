@@ -1,5 +1,4 @@
-import { MessageDispatcher } from './Gateway/MessageDispatcher.js'
-import { MessageGateway } from './Gateway/MessageGateway.js'
+import { Participant } from './Participant/Participant.js'
 import type { Message, MessageClass } from './Message/Message.js'
 import type {
   CommandMessage,
@@ -33,7 +32,7 @@ import { getOrInsert } from './lang/Map.js'
  * ```
  */
 export class MessageBus {
-  readonly #dispatchers = new Map<string, MessageDispatcher>()
+  readonly #participants = new Map<string, Participant>()
 
   readonly #subscriberRoutes = new Map<MessageClass, Set<string>>()
 
@@ -51,13 +50,13 @@ export class MessageBus {
    * @internal
    */
   readonly on = <M extends MessageClass>(
-    gateway: MessageGateway,
+    name: string,
     messageClass: M,
   ): (() => void) => {
     const routes = getOrInsert(this.#subscriberRoutes, messageClass, new Set())
-    routes.add(gateway.name)
+    routes.add(name)
     return () => {
-      this.#subscriberRoutes.get(messageClass)?.delete(gateway.name)
+      this.#subscriberRoutes.get(messageClass)?.delete(name)
     }
   }
 
@@ -67,13 +66,13 @@ export class MessageBus {
    * @internal
    */
   readonly register = <T>(
-    gateway: MessageGateway,
+    name: string,
     commandClass: CommandMessageClass<T>,
   ): (() => void) => {
     const routes = getOrInsert(this.#responderRoutes, commandClass, new Set())
-    routes.add(gateway.name)
+    routes.add(name)
     return () => {
-      this.#responderRoutes.get(commandClass)?.delete(gateway.name)
+      this.#responderRoutes.get(commandClass)?.delete(name)
     }
   }
 
@@ -84,13 +83,13 @@ export class MessageBus {
    * @internal
    */
   readonly intercept = (
-    gateway: MessageGateway,
+    name: string,
     messageClass: MessageClass,
   ): (() => void) => {
     const routes = getOrInsert(this.#interceptorRoutes, messageClass, new Set())
-    routes.add(gateway.name)
+    routes.add(name)
     return () => {
-      this.#interceptorRoutes.get(messageClass)?.delete(gateway.name)
+      this.#interceptorRoutes.get(messageClass)?.delete(name)
     }
   }
 
@@ -103,14 +102,14 @@ export class MessageBus {
    * @throws if a participant with `name` is already registered.
    */
   gateway(name: string, abortSignal?: AbortSignal) {
-    if (this.#dispatchers.has(name))
+    if (this.#participants.has(name))
       throw new Error(`Gateway "${name}" has already been registered`)
 
-    const dispatcher = new MessageDispatcher(this, name, abortSignal)
-    this.#dispatchers.set(name, dispatcher)
+    const participant = new Participant(this, name, abortSignal)
+    this.#participants.set(name, participant)
 
-    dispatcher.onAbort(() => {
-      this.#dispatchers.delete(name)
+    participant.onAbort(() => {
+      this.#participants.delete(name)
       for (const routes of [
         this.#subscriberRoutes,
         this.#responderRoutes,
@@ -119,7 +118,7 @@ export class MessageBus {
         for (const names of routes.values()) names.delete(name)
     })
 
-    return dispatcher.createGateway()
+    return participant.gateway
   }
 
   /**
@@ -135,7 +134,9 @@ export class MessageBus {
       this.#interceptorRoutes.get(message.constructor as MessageClass) ?? []
 
     for (const name of interceptorNames) {
-      const result = await this.#dispatchers.get(name)?.runInterceptors(message)
+      const result = await this.#participants
+        .get(name)
+        ?.dispatcher.runInterceptors(message)
       if (result === CANCEL) return CANCEL
       else if (result) message = result as M
     }
@@ -146,7 +147,7 @@ export class MessageBus {
     if (!subscriberNames?.size) return message
 
     for (const name of subscriberNames)
-      this.#dispatchers.get(name)?.dispatch(message)
+      this.#participants.get(name)?.dispatcher.dispatch(message)
 
     return message
   }
@@ -173,9 +174,9 @@ export class MessageBus {
 
     await Promise.all(
       Array.from(responderNames, (name) =>
-        this.#dispatchers
+        this.#participants
           .get(name)
-          ?.dispatchCommand(command, context, reportError),
+          ?.dispatcher.dispatchCommand(command, context, reportError),
       ),
     )
   }
@@ -186,7 +187,7 @@ export class MessageBus {
    * Unlike {@link MessageBus.pause}, this cannot be undone.
    */
   abort(name: string, reason?: Error) {
-    this.#dispatchers.get(name)?.abort(reason)
+    this.#participants.get(name)?.abort(reason)
   }
 
   /**
@@ -197,8 +198,9 @@ export class MessageBus {
    */
   resume(name?: string) {
     if (name === undefined)
-      for (const dispatcher of this.#dispatchers.values()) dispatcher.resume()
-    else this.#dispatchers.get(name)?.resume()
+      for (const participant of this.#participants.values())
+        participant.resume()
+    else this.#participants.get(name)?.resume()
   }
 
   /**
@@ -208,7 +210,7 @@ export class MessageBus {
    */
   pause(name?: string) {
     if (name === undefined)
-      for (const dispatcher of this.#dispatchers.values()) dispatcher.pause()
-    else this.#dispatchers.get(name)?.pause()
+      for (const participant of this.#participants.values()) participant.pause()
+    else this.#participants.get(name)?.pause()
   }
 }

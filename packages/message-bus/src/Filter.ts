@@ -8,7 +8,7 @@ import type { MessageClass } from './Message/Message.js'
  *
  * This is EIP's *Message Filter* (whole-message pass-or-discard) — not the
  * similarly named *Content Filter*, which strips fields from within a message.
- * A {@link Handler} carrying one is a *Selective Consumer*.
+ * A {@link SelectivePerformer} carrying one is a *Selective Consumer*.
  *
  * @example
  * ```ts

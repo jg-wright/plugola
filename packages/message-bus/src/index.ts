@@ -1,4 +1,4 @@
-export { MessageGateway } from './Gateway/MessageGateway.js'
+export { MessageGateway } from './Participant/MessageGateway.js'
 export { MessageBus } from './MessageBus.js'
 export * from './Roles/Subscriber.js'
 export * from './Roles/Responder.js'

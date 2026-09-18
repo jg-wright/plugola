@@ -15,26 +15,29 @@ import type {
 } from '../Roles/Responder.js'
 import type { Serializable } from '../Message/Serializable.js'
 import type { Filter } from '../Filter.js'
-import { getOrInsert } from '../lang/Map.js'
-import type { MessageDispatcher } from './MessageDispatcher.js'
-import { Handler } from './Handler.js'
+import type { MessageBus } from '../MessageBus.js'
+import type { Participant } from './Participant.js'
 import { onAbort } from '../lang/AbortSignal.js'
 
 /**
- * A participant's handle on the {@link MessageBus} — what `bus.gateway(name)`
- * returns. Everything a participant does flows through here: subscribing to
- * messages ({@link MessageGateway.on}, {@link MessageGateway.once},
+ * The outbound half of a {@link Participant} — what `bus.gateway(name)` returns.
+ * Everything a participant does flows through here: subscribing to messages
+ * ({@link MessageGateway.on}, {@link MessageGateway.once},
  * {@link MessageGateway.until}), publishing them ({@link MessageGateway.emit}),
  * transforming them in flight ({@link MessageGateway.intercept}), and the
  * request/stream pattern of {@link MessageGateway.register} +
- * {@link MessageGateway.invoke}.
+ * {@link MessageGateway.invoke}. It writes the participant's
+ * {@link PerformerRegistry} (which the {@link MessageDispatcher} reads) and
+ * publishes onto the {@link MessageBus}.
  *
- * Outbound calls (`emit`, `invoke`) are queued through this participant's own
+ * Outbound calls (`emit`, `invoke`) are queued through the participant's own
  * queue, so while it is paused they buffer and replay when it resumes. Every
  * subscription returns a disposer that removes it.
  */
 export class MessageGateway {
-  readonly #dispatcher: MessageDispatcher
+  readonly #participant: Participant
+
+  readonly #bus: MessageBus
 
   readonly #invoke: <E extends CommandMessageClass<unknown>>(
     command: InstanceType<E>,
@@ -56,10 +59,11 @@ export class MessageGateway {
     message: M & Serializable<M>,
   ) => Promise<M | typeof CANCEL>
 
-  constructor(dispatcher: MessageDispatcher) {
-    this.#dispatcher = dispatcher
+  constructor(participant: Participant, bus: MessageBus) {
+    this.#participant = participant
+    this.#bus = bus
 
-    this.#invoke = dispatcher.queue.queueMethod(
+    this.#invoke = participant.queue.queueMethod(
       async (
         command: CommandMessage<unknown>,
         context: {
@@ -68,25 +72,25 @@ export class MessageGateway {
         },
         reportError: ResponderErrorHandler,
       ) => {
-        const result = await this.#dispatcher.bus.emit(command)
+        const result = await bus.emit(command)
         if (result === CANCEL) return
-        await this.#dispatcher.bus.invoke(result, context, reportError)
+        await bus.invoke(result, context, reportError)
       },
     )
 
-    this.emit = dispatcher.queue.queueMethod(<M extends Message>(message: M) =>
-      this.#dispatcher.bus.emit(message),
+    this.emit = participant.queue.queueMethod(<M extends Message>(message: M) =>
+      bus.emit(message),
     )
   }
 
   /** This participant's unique name on the bus. */
   get name() {
-    return this.#dispatcher.name
+    return this.#participant.name
   }
 
   /** The signal that fires when this participant is aborted; useful for teardown. */
   get abortSignal(): AbortSignal {
-    return this.#dispatcher.abortSignal
+    return this.#participant.abortSignal
   }
 
   /**
@@ -102,7 +106,7 @@ export class MessageGateway {
    * are addressed by name so one can control another's lifecycle.
    */
   resume(name: string) {
-    this.#dispatcher.bus.resume(name)
+    this.#bus.resume(name)
   }
 
   /**
@@ -110,7 +114,7 @@ export class MessageGateway {
    * buffer until {@link MessageGateway.resume}. Reversible.
    */
   pause(name: string) {
-    this.#dispatcher.bus.pause(name)
+    this.#bus.pause(name)
   }
 
   /**
@@ -118,7 +122,7 @@ export class MessageGateway {
    * name. Not reversible; use {@link MessageGateway.pause} to merely pause.
    */
   abort(name: string, reason?: any) {
-    this.#dispatcher.bus.abort(name, reason)
+    this.#bus.abort(name, reason)
   }
 
   /**
@@ -151,9 +155,9 @@ export class MessageGateway {
     filterOrSubscriber: Filter<M> | Subscriber<M>,
     subscriber?: Subscriber<M>,
   ): () => void {
-    return this.#addListener(
-      this.#dispatcher.subscribers,
-      this.#dispatcher.bus.on,
+    return this.#addPerformer(
+      this.#participant.registry.addSubscriber,
+      this.#bus.on,
       messageClass,
       filterOrSubscriber,
       subscriber,
@@ -248,9 +252,9 @@ export class MessageGateway {
     filterOrResponder: Filter<E> | Responder<E>,
     responder?: Responder<E>,
   ): () => void {
-    return this.#addListener(
-      this.#dispatcher.responders,
-      this.#dispatcher.bus.register,
+    return this.#addPerformer(
+      this.#participant.registry.addResponder,
+      this.#bus.register,
       commandClass,
       filterOrResponder,
       responder,
@@ -284,9 +288,9 @@ export class MessageGateway {
     filterOrInterceptor: Filter<M> | Interceptor<M>,
     interceptor?: Interceptor<M>,
   ): () => void {
-    return this.#addListener(
-      this.#dispatcher.interceptors,
-      this.#dispatcher.bus.intercept,
+    return this.#addPerformer(
+      this.#participant.registry.addInterceptor,
+      this.#bus.intercept,
       messageClass,
       filterOrInterceptor,
       interceptor,
@@ -347,25 +351,27 @@ export class MessageGateway {
     }
   }
 
-  #addListener<M extends MessageClass, F extends (...args: any) => any>(
-    registry: Map<M, Set<Handler<InstanceType<M>>>>,
-    subscribe: (gateway: this, messageClass: M) => () => void,
-    messageClass: M,
-    filterOrCallback: Filter<M> | F,
-    callback?: F,
+  #addPerformer<
+    Add extends (
+      messageClass: any,
+      filter: Filter<MessageClass>,
+      callback: any,
+    ) => () => boolean,
+  >(
+    add: Add,
+    subscribe: (name: string, messageClass: any) => () => void,
+    messageClass: unknown,
+    filterOrCallback: unknown,
+    callback?: unknown,
   ) {
-    const filter = (callback ? filterOrCallback : {}) as Filter<M>
-    callback ??= filterOrCallback as F
+    const filter = (callback ? filterOrCallback : {}) as Filter<MessageClass>
+    callback ??= filterOrCallback
 
-    const handlers = getOrInsert(registry, messageClass, new Set())
-    const handler = new Handler(filter, callback)
-    handlers.add(handler)
+    const removePerformer = add(messageClass, filter, callback)
+    const unregister = subscribe(this.name, messageClass)
 
-    const unregister = subscribe(this, messageClass)
     return () => {
-      const handlers = registry.get(messageClass)
-      handlers?.delete(handler)
-      if (!handlers?.size) unregister()
+      if (removePerformer()) unregister()
     }
   }
 }

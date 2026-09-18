@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest'
 import { MessageBus } from '../src/MessageBus.js'
 import { Message } from '../src/Message/Message.js'
-import type { MessageGateway } from '../src/Gateway/MessageGateway.js'
+import type { MessageGateway } from '../src/Participant/MessageGateway.js'
 
 let gatewayA: MessageGateway
 let gatewayB: MessageGateway
