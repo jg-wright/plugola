@@ -13,6 +13,7 @@ import type {
   ResponderContext,
   ResponderErrorHandler,
 } from '../Roles/Responder.js'
+import type { Serializable } from '../Message/Serializable.js'
 import type { Filter } from '../Filter.js'
 import { getOrInsert } from '../lang/Map.js'
 import type { MessageDispatcher } from './MessageDispatcher.js'
@@ -46,8 +47,14 @@ export class MessageGateway {
    * delivers to every participant subscribed to the message's class. Resolves to
    * the message as it stood after interception, or {@link CANCEL} if it was
    * cancelled. Queued through this participant, so it waits while it is paused.
+   *
+   * The message's payload must be {@link Serializable}, so that a subscriber
+   * receiving it later (after the queue was paused) sees a faithful snapshot
+   * rather than a possibly-stale live reference.
    */
-  readonly emit: <M extends Message>(message: M) => Promise<M | typeof CANCEL>
+  readonly emit: <M extends Message>(
+    message: M & Serializable<M>,
+  ) => Promise<M | typeof CANCEL>
 
   constructor(dispatcher: MessageDispatcher) {
     this.#dispatcher = dispatcher
@@ -309,7 +316,7 @@ export class MessageGateway {
    * ```
    */
   invoke<E extends CommandMessage<unknown>>(
-    command: E,
+    command: E & Serializable<E>,
     {
       signal,
       onError = (error) => {
