@@ -1,71 +1,71 @@
 import { beforeEach, expect, test, vi } from 'vitest'
-import { Bus } from '../src/Bus.js'
-import { Event } from '../src/Event.js'
-import type { PluginBroker } from '../src/Broker/PluginBroker.js'
+import { MessageBus } from '../src/MessageBus.js'
+import { Message } from '../src/Message/Message.js'
+import type { MessageGateway } from '../src/Gateway/MessageGateway.js'
 
-let brokerA: PluginBroker
-let brokerB: PluginBroker
+let gatewayA: MessageGateway
+let gatewayB: MessageGateway
 
 beforeEach(() => {
-  const bus = new Bus()
-  brokerA = bus.broker('a')
-  brokerB = bus.broker('b')
+  const bus = new MessageBus()
+  gatewayA = bus.gateway('a')
+  gatewayB = bus.gateway('b')
   bus.resume()
 })
 
-test('an empty filter matches every event', () => {
+test('an empty filter matches every message', () => {
   const spy = vi.fn()
-  brokerA.on(TestEvent, {}, spy)
-  brokerB.emit(new TestEvent('anything'))
+  gatewayA.on(TestMessage, {}, spy)
+  gatewayB.emit(new TestMessage('anything'))
   expect(spy).toHaveBeenCalledTimes(1)
 })
 
 test('a value filter matches on equality', () => {
   const spy = vi.fn()
-  brokerA.on(TestEvent, { foo: 'yes' }, spy)
-  brokerB.emit(new TestEvent('no'))
+  gatewayA.on(TestMessage, { foo: 'yes' }, spy)
+  gatewayB.emit(new TestMessage('no'))
   expect(spy).not.toHaveBeenCalled()
-  brokerB.emit(new TestEvent('yes'))
+  gatewayB.emit(new TestMessage('yes'))
   expect(spy).toHaveBeenCalledTimes(1)
 })
 
 test('a predicate filter matches on the returned boolean', () => {
   const spy = vi.fn()
-  brokerA.on(TestEvent, { foo: (e) => e.foo.startsWith('a') }, spy)
-  brokerB.emit(new TestEvent('bee'))
+  gatewayA.on(TestMessage, { foo: (m) => m.foo.startsWith('a') }, spy)
+  gatewayB.emit(new TestMessage('bee'))
   expect(spy).not.toHaveBeenCalled()
-  brokerB.emit(new TestEvent('ant'))
+  gatewayB.emit(new TestMessage('ant'))
   expect(spy).toHaveBeenCalledTimes(1)
 })
 
 test('a multi-key filter requires every key to match (AND, not OR)', () => {
   const spy = vi.fn()
-  brokerA.on(TestEvent, { foo: 'match', bar: 'match' }, spy)
+  gatewayA.on(TestMessage, { foo: 'match', bar: 'match' }, spy)
 
   // only foo matches
-  brokerB.emit(new TestEvent('match', 'other'))
+  gatewayB.emit(new TestMessage('match', 'other'))
   // only bar matches
-  brokerB.emit(new TestEvent('other', 'match'))
+  gatewayB.emit(new TestMessage('other', 'match'))
   expect(spy).not.toHaveBeenCalled()
 
   // both match
-  brokerB.emit(new TestEvent('match', 'match'))
+  gatewayB.emit(new TestMessage('match', 'match'))
   expect(spy).toHaveBeenCalledTimes(1)
 })
 
 test('a multi-key filter mixes value and predicate keys with AND', () => {
   const spy = vi.fn()
-  brokerA.on(TestEvent, { foo: 'match', bar: (e) => e.bar.length > 2 }, spy)
+  gatewayA.on(TestMessage, { foo: 'match', bar: (m) => m.bar.length > 2 }, spy)
 
-  brokerB.emit(new TestEvent('match', 'no')) // predicate fails
-  brokerB.emit(new TestEvent('nope', 'yesss')) // value fails
+  gatewayB.emit(new TestMessage('match', 'no')) // predicate fails
+  gatewayB.emit(new TestMessage('nope', 'yesss')) // value fails
   expect(spy).not.toHaveBeenCalled()
 
-  brokerB.emit(new TestEvent('match', 'yesss'))
+  gatewayB.emit(new TestMessage('match', 'yesss'))
   expect(spy).toHaveBeenCalledTimes(1)
 })
 
-class TestEvent implements Event {
+class TestMessage implements Message {
   $name = 'test'
   constructor(
     readonly foo: string,
