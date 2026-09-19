@@ -3,18 +3,16 @@ import {
   MessagingBridge,
   MessageBus,
   MessageRegistry,
-} from '../../src/index.ts'
-import {
-  MessagePortChannel,
+  PortChannel,
   type PortLike,
-} from '../helpers/message-port-channel.ts'
+} from '../../src/index.ts'
 
 export function createBridge(port: PortLike) {
   const bus = new MessageBus()
   const registry = new MessageRegistry()
   const Ready = registry.registerMessage<{ from: string }>('ready')
   const Sum = registry.registerCommand<{ a: number; b: number }, number>('sum')
-  new MessagingBridge(bus, new MessagePortChannel(port), registry)
+  new MessagingBridge(bus, new PortChannel(port), registry)
   return { bus, Ready, Sum }
 }
 

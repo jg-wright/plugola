@@ -1,4 +1,4 @@
-import type { Channel, Frame } from '../../src/Channel/Channel.ts'
+import type { Channel, Frame } from './Channel.ts'
 
 /**
  * A {@link Channel} over a `node:worker_threads` port — either a `Worker` (on the
@@ -9,7 +9,7 @@ import type { Channel, Frame } from '../../src/Channel/Channel.ts'
  * This lives in the test tree deliberately: concrete transport adapters ship in
  * their own packages, keeping `message-bus` environment-agnostic.
  */
-export class MessagePortChannel implements Channel {
+export class PortChannel implements Channel {
   readonly #port: PortLike
 
   constructor(port: PortLike) {
