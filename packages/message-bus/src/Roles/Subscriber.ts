@@ -1,4 +1,4 @@
-import { MessageClass } from '../Message/Message.js'
+import type { MessageClass } from '../Message/Message.ts'
 
 /**
  * Handles an emitted message. Registered with `gateway.on` / `gateway.once`. A

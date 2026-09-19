@@ -1,4 +1,4 @@
-import type { MessageClass } from './Message/Message.js'
+import type { MessageClass } from './Message/Message.ts'
 
 /**
  * Narrows a subscription to only the messages you care about. A filter is a

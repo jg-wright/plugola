@@ -1,4 +1,4 @@
-import type { Runnable } from './Runnable.js'
+import type { Runnable } from './Runnable.ts'
 
 export class Queue<T> implements Runnable {
   #exec: (item: T) => void

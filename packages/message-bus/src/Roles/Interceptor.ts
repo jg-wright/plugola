@@ -1,4 +1,4 @@
-import { MessageClass } from '../Message/Message.js'
+import type { MessageClass } from '../Message/Message.ts'
 
 /**
  * Inspects a message before subscribers see it and may transform or cancel it.
@@ -25,7 +25,7 @@ export type InterceptorResult<M extends MessageClass> =
   | void
   | InstanceType<M>
   | typeof CANCEL
-  | Promise<InterceptorResult<M>>
+  | Promise<void | InstanceType<M> | typeof CANCEL>
 
 /**
  * Returned by an interceptor to stop a message dead: no further interceptors run

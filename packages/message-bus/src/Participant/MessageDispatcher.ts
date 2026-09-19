@@ -1,15 +1,15 @@
-import type { Message, MessageClass } from '../Message/Message.js'
+import type { Message, MessageClass } from '../Message/Message.ts'
 import type {
   CommandMessage,
   CommandMessageClass,
-} from '../Message/CommandMessage.js'
-import { CANCEL } from '../Roles/Interceptor.js'
+} from '../Message/CommandMessage.ts'
+import { CANCEL } from '../Roles/Interceptor.ts'
 import type {
   ResponderContext,
   ResponderErrorHandler,
-} from '../Roles/Responder.js'
-import type { Participant } from './Participant.js'
-import type { MessageGateway } from './MessageGateway.js'
+} from '../Roles/Responder.ts'
+import type { Participant } from './Participant.ts'
+import type { MessageGateway } from './MessageGateway.ts'
 
 /**
  * The inbound half of a {@link Participant}: the bus delivers messages/commands

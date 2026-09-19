@@ -4,10 +4,10 @@
 // functions below exist only so the compiler checks their bodies.
 
 import { expectTypeOf } from 'vitest'
-import type { MessageGateway } from '../src/Participant/MessageGateway.js'
-import type { Message } from '../src/Message/Message.js'
-import { CommandMessage } from '../src/Message/CommandMessage.js'
-import type { Serializable } from '../src/Message/Serializable.js'
+import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
+import type { Message } from '../src/Message/Message.ts'
+import { CommandMessage } from '../src/Message/CommandMessage.ts'
+import type { Serializable } from '../src/Message/Serializable.ts'
 
 // --- Serializable<T> leaves JSON-safe payloads unchanged -------------------
 

@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { MessageBus } from '../src/MessageBus.js'
-import { Message } from '../src/Message/Message.js'
-import { CommandMessage } from '../src/Message/CommandMessage.js'
-import { CANCEL } from '../src/Roles/Interceptor.js'
-import type { MessageGateway } from '../src/Participant/MessageGateway.js'
+import { MessageBus } from '../src/MessageBus.ts'
+import { CANCEL } from '../src/Roles/Interceptor.ts'
+import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
+import { message } from '../src/Message/Message.ts'
+import { command } from '../src/Message/CommandMessage.ts'
+
+const TestMessage = message<{ foo: string }>('test')
+const TestCommand = command<{ foo: string }, string>('test')
 
 let bus: MessageBus
 let gatewayA: MessageGateway
@@ -20,9 +23,9 @@ describe('unsubscribe', () => {
   test('on() returns a disposer that stops delivery', () => {
     const spy = vi.fn()
     const off = gatewayA.on(TestMessage, spy)
-    gatewayB.emit(new TestMessage('one'))
+    gatewayB.emit(new TestMessage({ foo: 'one' }))
     off()
-    gatewayB.emit(new TestMessage('two'))
+    gatewayB.emit(new TestMessage({ foo: 'two' }))
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
@@ -30,20 +33,23 @@ describe('unsubscribe', () => {
     const spy = vi.fn()
     const off = gatewayA.on(TestMessage, spy)
     off()
-    gatewayB.emit(new TestMessage('x'))
-    gatewayB.emit(new TestMessage('y'))
+    gatewayB.emit(new TestMessage({ foo: 'x' }))
+    gatewayB.emit(new TestMessage({ foo: 'y' }))
     expect(spy).not.toHaveBeenCalled()
   })
 
   test('intercept() returns a disposer', async () => {
-    const spy = vi.fn((m: TestMessage) => new TestMessage(`i ${m.foo}`))
+    const spy = vi.fn(
+      (m: InstanceType<typeof TestMessage>) =>
+        new TestMessage({ foo: `i ${m.foo}` }),
+    )
     const off = gatewayA.intercept(TestMessage, spy)
     off()
     const onSpy = vi.fn()
     gatewayB.on(TestMessage, onSpy)
-    await gatewayB.emit(new TestMessage('foo'))
+    await gatewayB.emit(new TestMessage({ foo: 'foo' }))
     expect(spy).not.toHaveBeenCalled()
-    expect(onSpy).toHaveBeenCalledWith(new TestMessage('foo'))
+    expect(onSpy).toHaveBeenCalledWith(new TestMessage({ foo: 'foo' }))
   })
 })
 
@@ -52,7 +58,7 @@ describe('abort', () => {
     const spy = vi.fn()
     gatewayA.on(TestMessage, spy)
     gatewayB.abort('a')
-    gatewayB.emit(new TestMessage('foo'))
+    gatewayB.emit(new TestMessage({ foo: 'foo' }))
     expect(spy).not.toHaveBeenCalled()
   })
 
@@ -83,27 +89,32 @@ describe('pause / resume', () => {
     const spy = vi.fn()
     gatewayB.pause('a')
     gatewayA.on(TestMessage, spy)
-    gatewayB.emit(new TestMessage('foo'))
+    gatewayB.emit(new TestMessage({ foo: 'foo' }))
     expect(spy).not.toHaveBeenCalled()
     gatewayB.resume('a')
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
   test('a paused gateway does not intercept', async () => {
-    const spy = vi.fn((m: TestMessage) => new TestMessage(`i ${m.foo}`))
+    const spy = vi.fn(
+      (m: InstanceType<typeof TestMessage>) =>
+        new TestMessage({ foo: `i ${m.foo}` }),
+    )
     gatewayA.intercept(TestMessage, spy)
     gatewayB.pause('a')
     const onSpy = vi.fn()
     gatewayB.on(TestMessage, onSpy)
-    await gatewayB.emit(new TestMessage('foo'))
+    await gatewayB.emit(new TestMessage({ foo: 'foo' }))
     expect(spy).not.toHaveBeenCalled()
-    expect(onSpy).toHaveBeenCalledWith(new TestMessage('foo'))
+    expect(onSpy).toHaveBeenCalledWith(new TestMessage({ foo: 'foo' }))
   })
 })
 
 describe('invoke completion', () => {
   test('collect resolves to [] when there are no registrants', async () => {
-    expect(await gatewayB.invoke(new TestCommand('x')).collect()).toEqual([])
+    expect(
+      await gatewayB.invoke(new TestCommand({ foo: 'x' })).collect(),
+    ).toEqual([])
   })
 
   test('collect resolves to [] when the only registrant is paused', async () => {
@@ -111,7 +122,9 @@ describe('invoke completion', () => {
       send('nope')
     })
     gatewayB.pause('a')
-    expect(await gatewayB.invoke(new TestCommand('x')).collect()).toEqual([])
+    expect(
+      await gatewayB.invoke(new TestCommand({ foo: 'x' })).collect(),
+    ).toEqual([])
   })
 
   test('a filtered-out responder does not hang the stream', async () => {
@@ -121,9 +134,9 @@ describe('invoke completion', () => {
     gatewayA.register(TestCommand, { foo: 'never' }, (_e, { send }) => {
       send('nope')
     })
-    expect(await gatewayB.invoke(new TestCommand('actual')).collect()).toEqual(
-      [],
-    )
+    expect(
+      await gatewayB.invoke(new TestCommand({ foo: 'actual' })).collect(),
+    ).toEqual([])
   })
 
   test('completes when a responder returns without any explicit signal', async () => {
@@ -131,10 +144,9 @@ describe('invoke completion', () => {
       send('a')
       send('b')
     })
-    expect(await gatewayB.invoke(new TestCommand('x')).collect()).toEqual([
-      'a',
-      'b',
-    ])
+    expect(
+      await gatewayB.invoke(new TestCommand({ foo: 'x' })).collect(),
+    ).toEqual(['a', 'b'])
   })
 
   test('waits for an async responder to settle before completing', async () => {
@@ -144,10 +156,9 @@ describe('invoke completion', () => {
       await Promise.resolve()
       send('second')
     })
-    expect(await gatewayB.invoke(new TestCommand('x')).collect()).toEqual([
-      'first',
-      'second',
-    ])
+    expect(
+      await gatewayB.invoke(new TestCommand({ foo: 'x' })).collect(),
+    ).toEqual(['first', 'second'])
   })
 
   test('a throwing responder rejects the stream when no onError is given', async () => {
@@ -155,7 +166,7 @@ describe('invoke completion', () => {
       throw new Error('boom')
     })
     await expect(
-      gatewayB.invoke(new TestCommand('x')).collect(),
+      gatewayB.invoke(new TestCommand({ foo: 'x' })).collect(),
     ).rejects.toThrow('boom')
   })
 
@@ -167,7 +178,7 @@ describe('invoke completion', () => {
 
     const onError = vi.fn()
     const items = await gatewayB
-      .invoke(new TestCommand('x'), { onError })
+      .invoke(new TestCommand({ foo: 'x' }), { onError })
       .collect()
 
     expect(items).toEqual(['ok'])
@@ -183,7 +194,7 @@ describe('invoke completion', () => {
 
     const onError = vi.fn()
     const items = await gatewayA
-      .invoke(new TestCommand('x'), { onError })
+      .invoke(new TestCommand({ foo: 'x' }), { onError })
       .collect()
 
     expect(items).toEqual([])
@@ -199,7 +210,7 @@ describe('invoke completion', () => {
     })
 
     const onError = vi.fn()
-    await gatewayA.invoke(new TestCommand('x'), { onError }).collect()
+    await gatewayA.invoke(new TestCommand({ foo: 'x' }), { onError }).collect()
 
     const messages = onError.mock.calls.map((c) => (c[0] as Error).message)
     expect(messages.sort()).toEqual(['a', 'b'])
@@ -211,28 +222,37 @@ describe('invoke completion', () => {
       await Promise.resolve()
       send('b')
     })
-    const items = await gatewayA.invoke(new TestCommand('x')).collect()
+    const items = await gatewayA.invoke(new TestCommand({ foo: 'x' })).collect()
     expect(items.sort()).toEqual(['a', 'b'])
   })
 })
 
 describe('multiple interceptors', () => {
   test('are applied in a chain', async () => {
-    gatewayA.intercept(TestMessage, (m) => new TestMessage(`${m.foo}-a`))
-    gatewayB.intercept(TestMessage, (m) => new TestMessage(`${m.foo}-b`))
-    const spy = vi.fn()
+    gatewayA.intercept(
+      TestMessage,
+      (m) => new TestMessage({ foo: `${m.foo}-a` }),
+    )
+    gatewayB.intercept(
+      TestMessage,
+      (m) => new TestMessage({ foo: `${m.foo}-b` }),
+    )
+    const spy = vi.fn<(message: InstanceType<typeof TestMessage>) => void>()
     gatewayA.on(TestMessage, spy)
-    await gatewayB.emit(new TestMessage('start'))
-    const received = spy.mock.calls[0]?.[0] as TestMessage
+    await gatewayB.emit(new TestMessage({ foo: 'start' }))
+    const received = spy.mock.calls[0]?.[0]
     expect(received.foo).toMatch(/^start-/)
   })
 
   test('a later interceptor can cancel after an earlier one transformed', async () => {
-    gatewayA.intercept(TestMessage, (m) => new TestMessage(`${m.foo}-a`))
+    gatewayA.intercept(
+      TestMessage,
+      (m) => new TestMessage({ foo: `${m.foo}-a` }),
+    )
     gatewayB.intercept(TestMessage, () => CANCEL)
     const spy = vi.fn()
     gatewayA.on(TestMessage, spy)
-    const result = await gatewayB.emit(new TestMessage('start'))
+    const result = await gatewayB.emit(new TestMessage({ foo: 'start' }))
     expect(result).toBe(CANCEL)
     expect(spy).not.toHaveBeenCalled()
   })
@@ -240,17 +260,26 @@ describe('multiple interceptors', () => {
 
 describe('emit return value', () => {
   test('each call resolves to its own (possibly intercepted) message', async () => {
-    gatewayA.intercept(TestMessage, (m) => new TestMessage(`i ${m.foo}`))
-    const first = (await gatewayB.emit(new TestMessage('one'))) as TestMessage
-    const second = (await gatewayB.emit(new TestMessage('two'))) as TestMessage
+    gatewayA.intercept(
+      TestMessage,
+      (m) => new TestMessage({ foo: `i ${m.foo}` }),
+    )
+    const first = (await gatewayB.emit(
+      new TestMessage({ foo: 'one' }),
+    )) as InstanceType<typeof TestMessage>
+    const second = (await gatewayB.emit(
+      new TestMessage({ foo: 'two' }),
+    )) as InstanceType<typeof TestMessage>
     expect(first.foo).toBe('i one')
     expect(second.foo).toBe('i two')
   })
 
   test('a cancelled emit resolves to CANCEL without leaking to later emits', async () => {
     gatewayA.intercept(TestMessage, { foo: 'kill' }, () => CANCEL)
-    expect(await gatewayB.emit(new TestMessage('kill'))).toBe(CANCEL)
-    const after = (await gatewayB.emit(new TestMessage('ok'))) as TestMessage
+    expect(await gatewayB.emit(new TestMessage({ foo: 'kill' }))).toBe(CANCEL)
+    const after = (await gatewayB.emit(
+      new TestMessage({ foo: 'ok' }),
+    )) as InstanceType<typeof TestMessage>
     expect(after.foo).toBe('ok')
   })
 })
@@ -263,15 +292,3 @@ describe('until', () => {
     await expect(promise).rejects.toBe(reason)
   })
 })
-
-class TestMessage implements Message {
-  $name = 'test'
-  constructor(readonly foo: string) {}
-}
-
-class TestCommand extends CommandMessage<string> {
-  $name = 'test command'
-  constructor(readonly foo: string) {
-    super()
-  }
-}

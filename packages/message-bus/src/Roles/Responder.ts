@@ -1,4 +1,7 @@
-import { CommandMessageClass, ResponseType } from '../Message/CommandMessage.js'
+import type {
+  CommandMessageClass,
+  ResponseType,
+} from '../Message/CommandMessage.ts'
 
 /**
  * Handles a command message, streaming results back through `context.send`.

@@ -1,5 +1,5 @@
-import type { Message, MessageClass } from '../Message/Message.js'
-import type { Filter, FilterEntries, FilterPredicate } from '../Filter.js'
+import type { Message, MessageClass } from '../Message/Message.ts'
+import type { Filter, FilterEntries, FilterPredicate } from '../Filter.ts'
 
 /**
  * A performer (a {@link Subscriber}, {@link Responder}, or {@link Interceptor})
@@ -27,7 +27,7 @@ export class SelectivePerformer<M extends Message> {
     return this.#filterEntries.every(([key, value]) =>
       typeof value === 'function'
         ? (value as FilterPredicate<MessageClass>)(message)
-        : value === message[key],
+        : value === message[key as keyof M],
     )
   }
 }

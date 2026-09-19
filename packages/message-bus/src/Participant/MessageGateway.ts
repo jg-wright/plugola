@@ -1,23 +1,23 @@
-import { UnderlyingDefaultSource } from 'node:stream/web'
-import type { Message, MessageClass } from '../Message/Message.js'
+import type { UnderlyingDefaultSource } from 'node:stream/web'
+import type { Message, MessageClass } from '../Message/Message.ts'
 import type {
   CommandMessage,
   CommandMessageClass,
   ResponseType,
-} from '../Message/CommandMessage.js'
-import { CANCEL } from '../Roles/Interceptor.js'
-import type { Interceptor } from '../Roles/Interceptor.js'
-import type { Subscriber } from '../Roles/Subscriber.js'
+} from '../Message/CommandMessage.ts'
+import { CANCEL } from '../Roles/Interceptor.ts'
+import type { Interceptor } from '../Roles/Interceptor.ts'
+import type { Subscriber } from '../Roles/Subscriber.ts'
 import type {
   Responder,
   ResponderContext,
   ResponderErrorHandler,
-} from '../Roles/Responder.js'
-import type { Serializable } from '../Message/Serializable.js'
-import type { Filter } from '../Filter.js'
-import type { MessageBus } from '../MessageBus.js'
-import type { Participant } from './Participant.js'
-import { onAbort } from '../lang/AbortSignal.js'
+} from '../Roles/Responder.ts'
+import type { Serializable } from '../Message/Serializable.ts'
+import type { Filter } from '../Filter.ts'
+import type { MessageBus } from '../MessageBus.ts'
+import type { Participant } from './Participant.ts'
+import { onAbort } from '../lang/AbortSignal.ts'
 
 /**
  * The outbound half of a {@link Participant} — what `bus.gateway(name)` returns.

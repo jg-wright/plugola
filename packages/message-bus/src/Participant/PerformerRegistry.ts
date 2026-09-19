@@ -1,14 +1,14 @@
-import type { Message, MessageClass } from '../Message/Message.js'
+import type { Message, MessageClass } from '../Message/Message.ts'
 import type {
   CommandMessage,
   CommandMessageClass,
-} from '../Message/CommandMessage.js'
-import type { Subscriber } from '../Roles/Subscriber.js'
-import type { Interceptor } from '../Roles/Interceptor.js'
-import type { Responder } from '../Roles/Responder.js'
-import type { Filter } from '../Filter.js'
-import { getOrInsert } from '../lang/Map.js'
-import { SelectivePerformer } from './SelectivePerformer.js'
+} from '../Message/CommandMessage.ts'
+import type { Subscriber } from '../Roles/Subscriber.ts'
+import type { Interceptor } from '../Roles/Interceptor.ts'
+import type { Responder } from '../Roles/Responder.ts'
+import type { Filter } from '../Filter.ts'
+import { getOrInsert } from '../lang/Map.ts'
+import { SelectivePerformer } from './SelectivePerformer.ts'
 
 /**
  * A participant's local wiring: the set of {@link Subscriber}s,

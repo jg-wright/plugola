@@ -1,5 +1,5 @@
-import { DiscriminatedQueue } from './DiscriminatedQueue.js'
-import type { Runnable } from './Runnable.js'
+import { DiscriminatedQueue } from './DiscriminatedQueue.ts'
+import type { Runnable } from './Runnable.ts'
 
 export class MethodQueue implements Runnable {
   #queue = new DiscriminatedQueue<Record<symbol, QueuedCall>>({})

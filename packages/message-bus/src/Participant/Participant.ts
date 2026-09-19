@@ -1,9 +1,9 @@
-import type { MessageBus } from '../MessageBus.js'
-import { onAbort } from '../lang/AbortSignal.js'
-import { MethodQueue } from '../Queue/MethodQueue.js'
-import { PerformerRegistry } from './PerformerRegistry.js'
-import { MessageDispatcher } from './MessageDispatcher.js'
-import { MessageGateway } from './MessageGateway.js'
+import type { MessageBus } from '../MessageBus.ts'
+import { onAbort } from '../lang/AbortSignal.ts'
+import { MethodQueue } from '../Queue/MethodQueue.ts'
+import { PerformerRegistry } from './PerformerRegistry.ts'
+import { MessageDispatcher } from './MessageDispatcher.ts'
+import { MessageGateway } from './MessageGateway.ts'
 
 /**
  * One named endpoint on the {@link MessageBus}. A participant is the shared

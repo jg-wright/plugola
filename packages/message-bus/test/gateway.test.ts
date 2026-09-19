@@ -1,11 +1,14 @@
 import { setTimeout } from 'node:timers/promises'
 import { beforeEach, describe, expect, Mock, test, vi } from 'vitest'
-import { MessageBus } from '../src/MessageBus.js'
-import { Message } from '../src/Message/Message.js'
-import { CommandMessage } from '../src/Message/CommandMessage.js'
-import { CANCEL } from '../src/Roles/Interceptor.js'
-import type { ResponderContext } from '../src/Roles/Responder.js'
-import type { MessageGateway } from '../src/Participant/MessageGateway.js'
+import { MessageBus } from '../src/MessageBus.ts'
+import { message } from '../src/Message/Message.ts'
+import { command } from '../src/Message/CommandMessage.ts'
+import { CANCEL } from '../src/Roles/Interceptor.ts'
+import type { ResponderContext } from '../src/Roles/Responder.ts'
+import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
+
+const TestMessage = message<{ foo: string }>('test')
+const TestCommand = command<{ foo: string }, string>('test command')
 
 let gatewayA: MessageGateway
 let gatewayB: MessageGateway
@@ -19,7 +22,7 @@ beforeEach(() => {
 
 test('emit', () => {
   const spy = vi.fn()
-  const message = new TestMessage('bar')
+  const message = new TestMessage({ foo: 'bar' })
   gatewayA.on(TestMessage, spy)
   gatewayB.emit(message)
   expect(spy).toHaveBeenCalledWith(message)
@@ -27,7 +30,7 @@ test('emit', () => {
 
 test('once', () => {
   const spy = vi.fn()
-  const message = new TestMessage('bar')
+  const message = new TestMessage({ foo: 'bar' })
   gatewayA.once(TestMessage, spy)
   gatewayA.emit(message)
   gatewayB.emit(message)
@@ -37,7 +40,7 @@ test('once', () => {
 
 test('twice', () => {
   const spy = vi.fn()
-  const message = new TestMessage('bar')
+  const message = new TestMessage({ foo: 'bar' })
   gatewayA.on(TestMessage, spy)
   gatewayA.emit(message)
   gatewayB.emit(message)
@@ -45,7 +48,7 @@ test('twice', () => {
 })
 
 test('until', async () => {
-  const message = new TestMessage('bar')
+  const message = new TestMessage({ foo: 'bar' })
   const promise = gatewayA.until(TestMessage)
   gatewayA.emit(message)
   expect(await promise).toEqual(message)
@@ -55,7 +58,7 @@ test('pause', () => {
   const spy = vi.fn()
   gatewayB.pause('a')
   gatewayA.on(TestMessage, spy)
-  gatewayB.emit(new TestMessage('foo'))
+  gatewayB.emit(new TestMessage({ foo: 'foo' }))
   expect(spy).not.toHaveBeenCalled()
   gatewayB.resume('a')
   expect(spy).toHaveBeenCalled()
@@ -71,7 +74,7 @@ test('abort', () => {
 describe('invoke', () => {
   let spy: Mock<
     (
-      command: TestCommand,
+      command: InstanceType<typeof TestCommand>,
       context: ResponderContext<typeof TestCommand>,
     ) => void
   >
@@ -87,13 +90,13 @@ describe('invoke', () => {
 
   test('collect', () =>
     expect(
-      gatewayB.invoke(new TestCommand('thing')).collect(),
+      gatewayB.invoke(new TestCommand({ foo: 'thing' })).collect(),
     ).resolves.toEqual(['one thing', 'two thing']))
 
   test('iterate', async () => {
     let result: string[] = []
     for await (const item of gatewayB
-      .invoke(new TestCommand('thing'))
+      .invoke(new TestCommand({ foo: 'thing' }))
       .iterate()) {
       result.push(item)
     }
@@ -102,7 +105,7 @@ describe('invoke', () => {
 
   test('it emits the message as well', () => {
     const onSpy = vi.fn()
-    const command = new TestCommand('bar')
+    const command = new TestCommand({ foo: 'bar' })
     gatewayA.on(TestCommand, onSpy)
     gatewayB.invoke(command)
     expect(onSpy).toHaveBeenCalledWith(command)
@@ -117,12 +120,9 @@ describe('invoke', () => {
       send('bar')
     })
 
-    expect(await gatewayB.invoke(new TestCommand('foo')).collect()).toEqual([
-      'one foo',
-      'two foo',
-      'foo',
-      'bar',
-    ])
+    expect(
+      await gatewayB.invoke(new TestCommand({ foo: 'foo' })).collect(),
+    ).toEqual(['one foo', 'two foo', 'foo', 'bar'])
   })
 
   test('timeouts', async () => {
@@ -136,7 +136,9 @@ describe('invoke', () => {
 
     expect(
       await gatewayB
-        .invoke(new TestCommand('foo'), { signal: AbortSignal.timeout(10) })
+        .invoke(new TestCommand({ foo: 'foo' }), {
+          signal: AbortSignal.timeout(10),
+        })
         .collect(),
     ).toEqual(['one foo', 'two foo', 'hello foo'])
   })
@@ -147,7 +149,7 @@ describe('intercept', () => {
     const spy = vi.fn()
     gatewayA.on(TestMessage, spy)
     gatewayB.intercept(TestMessage, () => CANCEL)
-    await gatewayB.emit(new TestMessage('foo'))
+    await gatewayB.emit(new TestMessage({ foo: 'foo' }))
     expect(spy).not.toHaveBeenCalled()
   })
 
@@ -156,10 +158,12 @@ describe('intercept', () => {
     gatewayA.on(TestMessage, spy)
     gatewayB.intercept(
       TestMessage,
-      (message) => new TestMessage(`Intercepted ${message.foo}`),
+      (message) => new TestMessage({ foo: `Intercepted ${message.foo}` }),
     )
-    await gatewayB.emit(new TestMessage('foo'))
-    expect(spy).toHaveBeenCalledWith(new TestMessage('Intercepted foo'))
+    await gatewayB.emit(new TestMessage({ foo: 'foo' }))
+    expect(spy).toHaveBeenCalledWith(
+      new TestMessage({ foo: 'Intercepted foo' }),
+    )
   })
 
   test('changing commands', async () => {
@@ -169,21 +173,11 @@ describe('intercept', () => {
     })
     gatewayB.intercept(
       TestCommand,
-      (command) => new TestCommand(`Intercepted ${command.foo}`),
+      (command) => new TestCommand({ foo: `Intercepted ${command.foo}` }),
     )
-    await gatewayB.invoke(new TestCommand('foo')).collect()
-    expect(spy).toHaveBeenCalledWith(new TestCommand('Intercepted foo'))
+    await gatewayB.invoke(new TestCommand({ foo: 'foo' })).collect()
+    expect(spy).toHaveBeenCalledWith(
+      new TestCommand({ foo: 'Intercepted foo' }),
+    )
   })
 })
-
-class TestMessage implements Message {
-  $name = 'test'
-  constructor(readonly foo: string) {}
-}
-
-class TestCommand extends CommandMessage<string> {
-  $name = 'test command'
-  constructor(readonly foo: string) {
-    super()
-  }
-}

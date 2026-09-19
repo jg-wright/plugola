@@ -1,15 +1,15 @@
-import { Participant } from './Participant/Participant.js'
-import type { Message, MessageClass } from './Message/Message.js'
+import { Participant } from './Participant/Participant.ts'
+import type { Message, MessageClass } from './Message/Message.ts'
 import type {
   CommandMessage,
   CommandMessageClass,
-} from './Message/CommandMessage.js'
-import { CANCEL } from './Roles/Interceptor.js'
+} from './Message/CommandMessage.ts'
+import { CANCEL } from './Roles/Interceptor.ts'
 import type {
   ResponderContext,
   ResponderErrorHandler,
-} from './Roles/Responder.js'
-import { getOrInsert } from './lang/Map.js'
+} from './Roles/Responder.ts'
+import { getOrInsert } from './lang/Map.ts'
 
 /**
  * The message bus: the shared hub the host owns. It hands out a
