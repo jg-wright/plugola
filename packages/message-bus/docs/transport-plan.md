@@ -29,10 +29,12 @@ process; a **Messaging Bridge** (EIP) translates at the boundary.
    directionality is a later extension.
 3. **Error envelope** is a plain `{ name, message, stack? }`; the caller side
    sees a reconstructed `Error`, not the original class.
-4. **`correlationId` is injected** into the bridge (`() => string`), not
-   hardcoded. Ids need only be unique among currently-pending commands on that
-   one bridge instance, so a monotonic counter suffices. Keeps `crypto` out of
-   the core and makes command tests deterministic.
+4. **`correlationId` defaults to `() => crypto.randomUUID()`**, and stays
+   overridable via options for a custom scheme or deterministic tests. (Initially
+   injected-and-required to keep `crypto` out of the core; revised after seeing it
+   in practice — `crypto.randomUUID` is a global in every target runtime, and the
+   default is far less ceremony at the call site.) Ids need only be unique among
+   currently-pending commands on one bridge instance.
 5. **Registry messages are data-only** (the generated class is final; extending
    it would break identity routing across the bridge). Hand-written class +
    explicit registration is the documented escape hatch.

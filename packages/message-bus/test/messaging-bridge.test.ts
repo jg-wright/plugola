@@ -9,10 +9,6 @@ import type { CommandMessageClass } from '../src/Message/CommandMessage.ts'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 
 const flush = () => new Promise((resolve) => setTimeout(resolve))
-const ids = () => {
-  let n = 0
-  return () => `id-${n++}`
-}
 
 let registry: MessageRegistry
 let Clicked: MessageClass<{ x: number }>
@@ -31,8 +27,8 @@ beforeEach(() => {
   const [chA, chB] = LoopbackChannel.pair()
   busA = new MessageBus()
   busB = new MessageBus()
-  bridgeA = new MessagingBridge(busA, chA, registry, { correlationId: ids() })
-  new MessagingBridge(busB, chB, registry, { correlationId: ids() })
+  bridgeA = new MessagingBridge(busA, chA, registry)
+  new MessagingBridge(busB, chB, registry)
 
   appA = busA.gateway('app')
   appB = busB.gateway('app')

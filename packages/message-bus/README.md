@@ -306,10 +306,9 @@ import {
 import { registry, Sum } from './contract.ts'
 
 const [here, there] = LoopbackChannel.pair()
-const correlationId = () => crypto.randomUUID()
 
-new MessagingBridge(busA, here, registry, { correlationId })
-new MessagingBridge(busB, there, registry, { correlationId })
+new MessagingBridge(busA, here, registry)
+new MessagingBridge(busB, there, registry)
 
 // A responder on busB…
 busB.gateway('math').register(Sum, (cmd, { send }) => send(cmd.a + cmd.b))

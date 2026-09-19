@@ -1,9 +1,5 @@
 import { expect, test } from 'vitest'
-import { MessageBus } from '../src/MessageBus.ts'
-import { MessageRegistry } from '../src/Channel/MessageRegistry.ts'
-import { MessagingBridge } from '../src/Bridge/MessagingBridge.ts'
-import { MessagePortChannel } from './helpers/message-port-channel.ts'
-import { defineContract, useWorker } from './fixtures/worker-contract.ts'
+import { createBridge, useWorker } from './fixtures/worker-contract.ts'
 
 // Bridges a bus on the main thread to a bus in a real node:worker_threads Worker
 // over postMessage — the end-to-end proof that a message and a command survive an
@@ -14,14 +10,7 @@ test('bridges messages and commands to a real Worker thread', async () => {
   const abortController = new AbortController()
   resource.worker.on('error', (err) => abortController.abort(err))
 
-  const bus = new MessageBus()
-  const registry = new MessageRegistry()
-  const { Ready, Sum } = defineContract(registry)
-
-  let n = 0
-  new MessagingBridge(bus, new MessagePortChannel(resource.worker), registry, {
-    correlationId: () => `m${n++}`,
-  })
+  const { bus, Ready, Sum } = createBridge(resource.worker)
   const app = bus.gateway('app', abortController.signal)
   bus.resume()
 

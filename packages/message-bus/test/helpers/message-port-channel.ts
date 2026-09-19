@@ -30,7 +30,7 @@ export class MessagePortChannel implements Channel {
 }
 
 /** The overlap between a worker_threads `Worker` and a `MessagePort`. */
-interface PortLike {
+export interface PortLike {
   postMessage(value: unknown): void
   on(event: 'message', listener: (value: any) => void): unknown
   off(event: 'message', listener: (value: any) => void): unknown

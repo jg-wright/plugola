@@ -1,15 +1,21 @@
-import type { MessageRegistry } from '../../src/Channel/MessageRegistry.ts'
 import { Worker } from 'node:worker_threads'
+import {
+  MessagingBridge,
+  MessageBus,
+  MessageRegistry,
+} from '../../src/index.ts'
+import {
+  MessagePortChannel,
+  type PortLike,
+} from '../helpers/message-port-channel.ts'
 
-/**
- * The shared message contract for the worker-bridge test. Both the main thread and
- * the worker call this against their own {@link MessageRegistry}, so the two ends
- * agree on `$name`s (the classes themselves are distinct per thread).
- */
-export function defineContract(registry: MessageRegistry) {
+export function createBridge(port: PortLike) {
+  const bus = new MessageBus()
+  const registry = new MessageRegistry()
   const Ready = registry.registerMessage<{ from: string }>('ready')
   const Sum = registry.registerCommand<{ a: number; b: number }, number>('sum')
-  return { Ready, Sum }
+  new MessagingBridge(bus, new MessagePortChannel(port), registry)
+  return { bus, Ready, Sum }
 }
 
 export function useWorker(): AsyncDisposable & { worker: Worker } {

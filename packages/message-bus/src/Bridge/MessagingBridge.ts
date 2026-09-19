@@ -32,9 +32,8 @@ import { onAbort } from '../lang/AbortSignal.ts'
  * @example
  * ```ts
  * const [here, there] = LoopbackChannel.pair()
- * let n = 0
- * new MessagingBridge(browserBus, here, registry, { correlationId: () => `${n++}` })
- * new MessagingBridge(workerBus, there, registry, { correlationId: () => `${n++}` })
+ * new MessagingBridge(browserBus, here, registry)
+ * new MessagingBridge(workerBus, there, registry)
  * ```
  */
 export class MessagingBridge {
@@ -51,7 +50,10 @@ export class MessagingBridge {
     bus: MessageBus,
     channel: Channel,
     registry: MessageRegistry,
-    { correlationId, name = 'bridge' }: MessagingBridgeOptions,
+    {
+      correlationId = () => crypto.randomUUID(),
+      name = 'bridge',
+    }: MessagingBridgeOptions = {},
   ) {
     this.#channel = channel
     this.#registry = registry
@@ -201,8 +203,12 @@ export class MessagingBridge {
 
 /** Constructor options for a {@link MessagingBridge}. */
 export interface MessagingBridgeOptions {
-  /** Mints a correlation id per outbound command; unique among this bridge's in-flight commands. */
-  correlationId: () => string
+  /**
+   * Mints a correlation id per outbound command; need only be unique among this
+   * bridge's in-flight commands. Defaults to `() => crypto.randomUUID()`; override
+   * for a custom scheme or deterministic tests.
+   */
+  correlationId?: () => string
   /** The participant name the bridge registers under. Defaults to `'bridge'`. */
   name?: string
 }
