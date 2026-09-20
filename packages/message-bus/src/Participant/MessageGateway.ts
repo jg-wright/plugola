@@ -1,4 +1,3 @@
-import type { UnderlyingDefaultSource } from 'node:stream/web'
 import type { Message, MessageClass } from '../Message/Message.ts'
 import type {
   CommandMessage,
@@ -332,6 +331,7 @@ export class MessageGateway {
     } = {},
   ): {
     collect(): Promise<ResponseType<E>[]>
+    first(): Promise<ResponseType<E> | undefined>
     iterate(): AsyncIterable<ResponseType<E>, undefined>
   } {
     type T = ResponseType<E>
@@ -345,6 +345,14 @@ export class MessageGateway {
         const items: T[] = []
         for await (const item of readableStream) items.push(item)
         return items
+      },
+
+      first: async () => {
+        const reader = readableStream.getReader()
+        const result = await reader.read()
+        reader.cancel()
+        reader.releaseLock()
+        return result.value
       },
 
       iterate: () => readableStream.values(),
@@ -376,9 +384,7 @@ export class MessageGateway {
   }
 }
 
-class ResponseSource<
-  E extends CommandMessage,
-> implements UnderlyingDefaultSource<ResponseType<E>> {
+class ResponseSource<E extends CommandMessage> {
   readonly #producer = new AbortController()
   #settled = false
   #teardown = (_reason: any) => {}
