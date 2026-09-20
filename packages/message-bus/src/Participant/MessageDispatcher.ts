@@ -1,7 +1,7 @@
-import type { Message, MessageClass } from '../Message/Message.ts'
+import type { Message, MessageFactory, MessageOf } from '../Message/Message.ts'
 import type {
   CommandMessage,
-  CommandMessageClass,
+  CommandMessageFactory,
 } from '../Message/CommandMessage.ts'
 import { CANCEL } from '../Roles/Interceptor.ts'
 import type {
@@ -32,19 +32,19 @@ export class MessageDispatcher {
 
     this.dispatch = participant.queue.queueMethod((message: Message) => {
       for (const performer of participant.registry.subscribersFor(
-        message.constructor as MessageClass,
+        message.$factory,
       ) ?? [])
         performer.perform(message)
     })
   }
 
-  async runInterceptors<E extends MessageClass | CommandMessageClass>(
-    message: InstanceType<E>,
-  ): Promise<InstanceType<E> | typeof CANCEL> {
+  async runInterceptors<E extends MessageFactory | CommandMessageFactory>(
+    message: MessageOf<E>,
+  ): Promise<MessageOf<E> | typeof CANCEL> {
     if (!this.#participant.queue.running) return message
 
     const interceptors = this.#participant.registry.interceptorsFor(
-      message.constructor as MessageClass,
+      (message as Message).$factory,
     )
 
     if (!interceptors?.size) return message
@@ -52,7 +52,7 @@ export class MessageDispatcher {
     for (const interceptor of interceptors) {
       const result = await interceptor.perform(message)
       if (result === CANCEL) return CANCEL
-      else if (result) message = result as InstanceType<E>
+      else if (result) message = result as MessageOf<E>
     }
 
     return message
@@ -69,13 +69,13 @@ export class MessageDispatcher {
    */
   async dispatchCommand<T>(
     command: CommandMessage<T>,
-    context: ResponderContext<CommandMessageClass<T>>,
+    context: ResponderContext<CommandMessageFactory<T>>,
     reportError: ResponderErrorHandler,
   ): Promise<void> {
     if (!this.#participant.queue.running) return
 
     const responders = this.#participant.registry.respondersFor(
-      command.constructor as CommandMessageClass<T>,
+      command.$factory as CommandMessageFactory<T>,
     )
 
     if (!responders?.size) return

@@ -1,7 +1,8 @@
 import type {
-  CommandMessageClass,
+  CommandMessageFactory,
   ResponseType,
 } from '../Message/CommandMessage.ts'
+import type { MessageOf } from '../Message/Message.ts'
 
 /**
  * Handles a command message, streaming results back through `context.send`.
@@ -16,8 +17,8 @@ import type {
  * })
  * ```
  */
-export interface Responder<E extends CommandMessageClass> {
-  (command: InstanceType<E>, context: ResponderContext<E>): void | Promise<void>
+export interface Responder<E extends CommandMessageFactory> {
+  (command: MessageOf<E>, context: ResponderContext<E>): void | Promise<void>
 }
 
 /**
@@ -29,7 +30,7 @@ export interface Responder<E extends CommandMessageClass> {
  * stream. `signal` aborts when the consumer aborts, the gateway aborts, or the
  * stream is otherwise torn down, so long-running work can bail early.
  */
-export interface ResponderContext<E extends CommandMessageClass> {
+export interface ResponderContext<E extends CommandMessageFactory> {
   send: (value: ResponseType<E>) => void
   signal: AbortSignal
 }

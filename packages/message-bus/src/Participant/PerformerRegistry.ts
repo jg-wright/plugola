@@ -1,7 +1,7 @@
-import type { Message, MessageClass } from '../Message/Message.ts'
+import type { Message, MessageFactory } from '../Message/Message.ts'
 import type {
   CommandMessage,
-  CommandMessageClass,
+  CommandMessageFactory,
 } from '../Message/CommandMessage.ts'
 import type { Subscriber } from '../Roles/Subscriber.ts'
 import type { Interceptor } from '../Roles/Interceptor.ts'
@@ -23,33 +23,33 @@ import { SelectivePerformer } from './SelectivePerformer.ts'
  * decide when to drop the participant's bus-level route.
  */
 export class PerformerRegistry {
-  readonly addSubscriber = <M extends MessageClass>(
+  readonly addSubscriber = <M extends MessageFactory>(
     messageClass: M,
     filter: Filter<M>,
     subscriber: Subscriber<M>,
   ) => this.#add(this.#subscribers, messageClass, filter, subscriber)
 
-  readonly addResponder = <E extends CommandMessageClass>(
+  readonly addResponder = <E extends CommandMessageFactory>(
     commandClass: E,
     filter: Filter<E>,
     responder: Responder<E>,
   ) => this.#add(this.#responders, commandClass, filter, responder)
 
-  readonly addInterceptor = <M extends MessageClass>(
+  readonly addInterceptor = <M extends MessageFactory>(
     messageClass: M,
     filter: Filter<M>,
     interceptor: Interceptor<M>,
   ) => this.#add(this.#interceptors, messageClass, filter, interceptor)
 
-  subscribersFor(messageClass: MessageClass) {
+  subscribersFor(messageClass: MessageFactory) {
     return this.#subscribers.get(messageClass)
   }
 
-  respondersFor(commandClass: CommandMessageClass) {
+  respondersFor(commandClass: CommandMessageFactory) {
     return this.#responders.get(commandClass)
   }
 
-  interceptorsFor(messageClass: MessageClass) {
+  interceptorsFor(messageClass: MessageFactory) {
     return this.#interceptors.get(messageClass)
   }
 
@@ -61,24 +61,24 @@ export class PerformerRegistry {
   }
 
   readonly #subscribers = new Map<
-    MessageClass,
+    MessageFactory,
     Set<SelectivePerformer<Message>>
   >()
 
   readonly #responders = new Map<
-    CommandMessageClass,
+    CommandMessageFactory,
     Set<SelectivePerformer<CommandMessage>>
   >()
 
   readonly #interceptors = new Map<
-    MessageClass,
+    MessageFactory,
     Set<SelectivePerformer<Message>>
   >()
 
   #add(
     registry: Map<any, Set<SelectivePerformer<any>>>,
     messageClass: unknown,
-    filter: Filter<MessageClass>,
+    filter: Filter<MessageFactory>,
     callback: (...args: any[]) => any,
   ): () => boolean {
     const performers = getOrInsert(registry, messageClass, new Set())

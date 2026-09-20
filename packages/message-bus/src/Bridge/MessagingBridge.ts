@@ -1,9 +1,6 @@
 import type { MessageBus } from '../MessageBus.ts'
-import type { MessageClass } from '../Message/Message.ts'
-import {
-  CommandMessage,
-  type CommandMessageClass,
-} from '../Message/CommandMessage.ts'
+import type { MessageFactory } from '../Message/Message.ts'
+import type { CommandMessageFactory } from '../Message/CommandMessage.ts'
 import type { Transportable } from '../Message/Transportable.ts'
 import type { MessageGateway } from '../Participant/MessageGateway.ts'
 import type { Channel, Frame, SerializedError } from '../Channel/Channel.ts'
@@ -67,12 +64,8 @@ export class MessagingBridge {
       this.#teardown(reason)
     })
 
-    for (const messageClass of registry.classes)
-      if (isCommandClass(messageClass))
-        this.#relayCommand(
-          messageClass as CommandMessageClass & Transportable<any>,
-        )
-      else this.#relay(messageClass)
+    for (const factory of registry.messageFactories) this.#relay(factory)
+    for (const factory of registry.commandFactories) this.#relayCommand(factory)
   }
 
   /** Tears down the bridge: stops relaying and receiving, and frees its name. */
@@ -80,33 +73,33 @@ export class MessagingBridge {
     this.#gateway.abort(this.#gateway.name, reason)
   }
 
-  /** Subscribes to `messageClass` locally and sends what it hears over the channel. */
-  #relay(messageClass: MessageClass & Transportable<any>) {
-    this.#gateway.on(messageClass, (message) => {
+  /** Subscribes to `factory` locally and sends what it hears over the channel. */
+  #relay(factory: MessageFactory & Transportable<any>) {
+    this.#gateway.on(factory, (message) => {
       if (isFromWire(message)) return
       this.#channel.send({
         kind: 'message',
-        name: messageClass.$name,
-        payload: messageClass.$encode(message),
+        name: factory.$name,
+        payload: factory.$encode(message),
       })
     })
   }
 
   /**
-   * Registers a responder for `commandClass` that forwards a local `invoke` to the
+   * Registers a responder for `factory` that forwards a local `invoke` to the
    * peer: it sends a command frame under a fresh correlation id and stays pending
    * until the peer's `response`/`response-end`/`response-error` frames arrive.
    */
-  #relayCommand(commandClass: CommandMessageClass & Transportable<any>) {
-    this.#gateway.register(commandClass, (command, { send, signal }) => {
+  #relayCommand(factory: CommandMessageFactory & Transportable<any>) {
+    this.#gateway.register(factory, (command, { send, signal }) => {
       if (isFromWire(command)) return
       const correlationId = this.#correlationId()
       return new Promise<void>((resolve, reject) => {
         this.#pending.set(correlationId, { send, resolve, reject })
         this.#channel.send({
           kind: 'command',
-          name: commandClass.$name,
-          payload: commandClass.$encode(command),
+          name: factory.$name,
+          payload: factory.$encode(command),
           correlationId,
         })
         // If the caller cancels before the peer finishes, tell the peer to stop and
@@ -128,16 +121,16 @@ export class MessagingBridge {
   #receive(frame: Frame) {
     switch (frame.kind) {
       case 'message': {
-        const messageClass = this.#registry.classFor(frame.name)
-        if (!messageClass) return
-        this.#gateway.emit(markFromWire(messageClass.$decode(frame.payload)))
+        const factory = this.#registry.factoryFor(frame.name)
+        if (!factory) return
+        this.#gateway.emit(markFromWire(factory.$decode(frame.payload)))
         break
       }
       case 'command': {
-        const commandClass = this.#registry.classFor(frame.name)
-        if (!commandClass) return
+        const factory = this.#registry.factoryFor(frame.name)
+        if (!factory) return
         this.#invokeForPeer(
-          markFromWire(commandClass.$decode(frame.payload)),
+          markFromWire(factory.$decode(frame.payload)),
           frame.correlationId,
         )
         break
@@ -219,11 +212,6 @@ interface PendingCommand {
   send(value: unknown): void
   resolve(): void
   reject(error: unknown): void
-}
-
-/** Whether a bus member's class is a command (needs the request/reply flow, not plain relay). */
-function isCommandClass(messageClass: MessageClass<any>): boolean {
-  return messageClass.prototype instanceof CommandMessage
 }
 
 /** Whether a message reached us from the wire — such a message is never relayed on. */

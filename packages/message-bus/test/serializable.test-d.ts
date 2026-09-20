@@ -65,7 +65,7 @@ expectTypeOf<Serializable<Widget>>().not.toEqualTypeOf<Widget>()
 
 export function assertEmit(gateway: MessageGateway) {
   gateway.emit(
-    new UserLoggedIn({
+    UserLoggedIn({
       userId: 'u1',
       roles: ['admin'],
       meta: { seen: true, count: 1 },
@@ -73,21 +73,21 @@ export function assertEmit(gateway: MessageGateway) {
   )
 
   // @ts-expect-error a Widget instance carries methods, so it is not serializable
-  gateway.emit(new Clicked({ target: new Widget('root') }))
+  gateway.emit(Clicked({ target: new Widget('root') }))
 
   // @ts-expect-error a function will not survive queuing
-  gateway.emit(new WithCallback({ cb: () => {} }))
+  gateway.emit(WithCallback({ cb: () => {} }))
 
   // @ts-expect-error the nested Date is not JSON-serializable
-  gateway.emit(new WithNested({ payload: { at: new Date() } }))
+  gateway.emit(WithNested({ payload: { at: new Date() } }))
 }
 
 // --- invoke only accepts a serializable command payload --------------------
 
 export function assertInvoke(gateway: MessageGateway) {
   // The command's DOM-shaped *response* is exempt; only its payload is checked.
-  gateway.invoke(new GetWidget({ id: 'root' }))
+  gateway.invoke(GetWidget({ id: 'root' }))
 
   // @ts-expect-error the Widget payload is not serializable
-  gateway.invoke(new RenderInto({ target: new Widget('x') }))
+  gateway.invoke(RenderInto({ target: new Widget('x') }))
 }

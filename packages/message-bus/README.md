@@ -1,11 +1,11 @@
 # @plugola/message-bus
 
-A small, class-based message bus for plugin systems, modelled on
+A small message bus for plugin systems, modelled on
 [Enterprise Integration Patterns](https://www.enterpriseintegrationpatterns.com/).
 
 Each member of the bus is a **participant**, and holds a **gateway**. Through it a
-participant publishes and subscribes to **messages** (class instances defined with
-`message()`), transforms them in flight with **interceptors**, and uses the
+participant publishes and subscribes to **messages** (plain objects built with the
+`message()` factory), transforms them in flight with **interceptors**, and uses the
 **invoke** pattern to ask other participants for a stream of values. Each
 participant owns its own queue, so any participant can be paused and resumed
 independently. Two buses in different runtimes (a window, a web worker, a server)
@@ -17,8 +17,9 @@ can be joined with a **messaging bridge**.
   participant lifecycle (`resume` / `pause` / `abort`).
 - **`MessageGateway`** — what `bus.gateway(name)` returns; the object a
   participant actually uses to subscribe, emit, and invoke.
-- **Message** — a class defined with `message()`. Routing is by _class_, not by
-  `$name` (which is a label, and the key used on the wire when bridging).
+- **Message** — a plain object built with the `message()` factory. Routing is by
+  _factory_, not by `$name` (which is a label, and the key used on the wire when
+  bridging).
 - **`CommandMessage`** — defined with `command()`; a message that also collects a
   stream of values back from its responders.
 
@@ -30,8 +31,9 @@ transform or veto a message before subscribers see it (`intercept`).
 ## Defining messages
 
 Define a message with `message()` and a command with `command()`. You give a wire
-name and a payload type; the returned class takes the payload as its single
-constructor argument and exposes it on the instance.
+name and a payload type; each returns a **factory** you call (no `new`) with the
+payload to build a message — a plain object that _is_ its payload plus a little
+metadata.
 
 ```typescript
 import { message, command } from '@plugola/message-bus'
@@ -39,14 +41,15 @@ import { message, command } from '@plugola/message-bus'
 const Greeting = message<{ text: string }>('greeting')
 const ListFiles = command<{ dir: string }, string>('list-files')
 
-const greeting = new Greeting({ text: 'hello' })
+const greeting = Greeting({ text: 'hello' })
 greeting.text // 'hello'
 greeting.$name // 'greeting'
 ```
 
-Each class carries its own name (`$name`), which is how the bus routes it and how
-it's addressed on the wire. A plain `message()`/`command()` is all you need to
-route within a single bus. To send a message _across_ a
+Each factory carries its own name (`$name`), which is how the bus routes it and
+how it's addressed on the wire — the factory itself is the routing identity, and
+every message points back at it via `$factory`. A plain `message()`/`command()`
+is all you need to route within a single bus. To send a message _across_ a
 [bridge](#transports-bridging-buses) it also needs a codec (`$encode`/`$decode`);
 that's added by defining it through a `MessageRegistry`, not by these factories —
 see [Transports](#transports-bridging-buses).
@@ -68,7 +71,7 @@ alice.on(Greeting, (greeting) => {
 
 bus.resume()
 
-bob.emit(new Greeting({ text: 'hello world' }))
+bob.emit(Greeting({ text: 'hello world' }))
 ```
 
 Every subscription returns a disposer:
@@ -89,7 +92,7 @@ const bus = new MessageBus()
 const gateway = bus.gateway('my-gateway')
 
 gateway.on(Greeting, () => console.info("I'll run once the bus is resumed"))
-gateway.emit(new Greeting({ text: 'hi' }))
+gateway.emit(Greeting({ text: 'hi' }))
 
 bus.resume()
 ```
@@ -105,7 +108,7 @@ prefixed with `$` (framework metadata like `$name`) are exempt.
 ```typescript
 const Clicked = message<{ el: HTMLElement }>('clicked')
 
-gateway.emit(new Clicked({ el })) // ⛔ HTMLElement isn't serializable
+gateway.emit(Clicked({ el })) // ⛔ HTMLElement isn't serializable
 ```
 
 Constraining payloads to plain data means a subscriber that receives a message
@@ -125,9 +128,9 @@ gateway.on(Order, { status: 'paid', total: (o) => o.total > 100 }, (order) => {
   console.info('big paid order', order)
 })
 
-gateway.emit(new Order({ status: 'pending', total: 500 })) // ignored — status
-gateway.emit(new Order({ status: 'paid', total: 50 })) // ignored — total
-gateway.emit(new Order({ status: 'paid', total: 500 })) // delivered
+gateway.emit(Order({ status: 'pending', total: 500 })) // ignored — status
+gateway.emit(Order({ status: 'paid', total: 50 })) // ignored — total
+gateway.emit(Order({ status: 'paid', total: 500 })) // delivered
 ```
 
 Filters work with `on`, `once`, `until`, `register`, and `intercept`.
@@ -149,14 +152,13 @@ unchanged. Interceptors across participants form a chain, each seeing the
 previous one's result.
 
 ```typescript
-gateway.intercept(
-  Greeting,
-  (greeting) => new Greeting({ text: greeting.text.toUpperCase() }),
+gateway.intercept(Greeting, (greeting) =>
+  Greeting({ text: greeting.text.toUpperCase() }),
 )
 
 gateway.on(Greeting, (g) => console.info(g.text)) // "HELLO"
 
-await gateway.emit(new Greeting({ text: 'hello' }))
+await gateway.emit(Greeting({ text: 'hello' }))
 ```
 
 Cancelling stops the message completely:
@@ -166,7 +168,7 @@ import { CANCEL } from '@plugola/message-bus'
 
 gateway.intercept(Greeting, () => CANCEL)
 
-const result = await gateway.emit(new Greeting({ text: 'hello' }))
+const result = await gateway.emit(Greeting({ text: 'hello' }))
 // result === CANCEL, and no subscribers were called
 ```
 
@@ -191,10 +193,10 @@ fs.register(ListFiles, async (cmd, { send, signal }) => {
 })
 
 // collect everything into an array…
-const files = await app.invoke(new ListFiles({ dir: '/tmp' })).collect()
+const files = await app.invoke(ListFiles({ dir: '/tmp' })).collect()
 
 // …or consume as a stream
-for await (const file of app.invoke(new ListFiles({ dir: '/tmp' })).iterate()) {
+for await (const file of app.invoke(ListFiles({ dir: '/tmp' })).iterate()) {
   console.info(file)
 }
 ```
@@ -216,7 +218,7 @@ values.
 
 ```typescript
 const files = await app
-  .invoke(new ListFiles({ dir: '/tmp' }), {
+  .invoke(ListFiles({ dir: '/tmp' }), {
     signal: AbortSignal.timeout(1_000),
     onError: (error) => console.warn('a file source failed', error),
   })
@@ -272,9 +274,9 @@ The bridge joins each bus as a participant and replicates messages and commands
 across a **`Channel`**, so neither bus core needs to know a transport exists.
 
 A **`MessageRegistry`** is the contract the two ends share: it maps each `$name`
-to its class, so a message named on the wire can be resolved and decoded on the
+to its factory, so a message named on the wire can be resolved and decoded on the
 other side. Defining a message _through_ the registry registers it in one act —
-so it can't be forgotten — and the registry doubles as the set of classes the
+so it can't be forgotten — and the registry doubles as the set of factories the
 bridge relays.
 
 ```typescript
@@ -288,7 +290,7 @@ export const Sum = registry.registerCommand<{ a: number; b: number }, number>(
 )
 ```
 
-Registering is also what gives a class its codec (`$encode`/`$decode`) — the
+Registering is also what gives a factory its codec (`$encode`/`$decode`) — the
 serialisation the bridge uses. By default a message encodes to its own fields and
 decodes by reconstruction, so most messages need nothing extra. Pass a codec only
 for non-trivial wire shapes:
@@ -296,7 +298,7 @@ for non-trivial wire shapes:
 ```typescript
 export const Occurred = registry.registerMessage<{ at: Date }>('occurred', {
   encode: (m) => ({ at: m.at.toISOString() }),
-  decode: (p) => new Occurred({ at: new Date(p.at) }),
+  decode: (p) => Occurred({ at: new Date(p.at) }),
 })
 ```
 
@@ -323,12 +325,12 @@ busB.gateway('math').register(Sum, (cmd, { send }) => send(cmd.a + cmd.b))
 // …answers an invoke on busA, across the bridge.
 const [sum] = await busA
   .gateway('app')
-  .invoke(new Sum({ a: 2, b: 3 }))
+  .invoke(Sum({ a: 2, b: 3 }))
   .collect()
 // sum === 5
 ```
 
-The bridge handles the awkward parts: only registered classes cross; a message
+The bridge handles the awkward parts: only registered factories cross; a message
 received from the wire is never relayed back (no echoes); commands are correlated
 so responses stream to the right caller; cancelling an `invoke` aborts the remote
 responder; and errors cross as a plain envelope.
@@ -358,5 +360,5 @@ class PostMessageChannel implements Channel {
 ```
 
 Both ends build an equivalent registry from the shared contract module; the
-classes are distinct objects per runtime (identity routes locally, `$name`s cross
-the wire).
+factories are distinct objects per runtime (identity routes locally, `$name`s
+cross the wire).

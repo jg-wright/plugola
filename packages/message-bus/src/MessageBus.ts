@@ -1,8 +1,8 @@
 import { Participant } from './Participant/Participant.ts'
-import type { Message, MessageClass } from './Message/Message.ts'
+import type { Message, MessageFactory } from './Message/Message.ts'
 import type {
   CommandMessage,
-  CommandMessageClass,
+  CommandMessageFactory,
 } from './Message/CommandMessage.ts'
 import { CANCEL } from './Roles/Interceptor.ts'
 import type {
@@ -28,17 +28,17 @@ import { getOrInsert } from './lang/Map.ts'
  * const b = bus.gateway('b')
  * a.on(Ping, () => console.log('pong'))
  * bus.resume()
- * b.emit(new Ping())
+ * b.emit(Ping())
  * ```
  */
 export class MessageBus {
   readonly #participants = new Map<string, Participant>()
 
-  readonly #subscriberRoutes = new Map<MessageClass, Set<string>>()
+  readonly #subscriberRoutes = new Map<MessageFactory, Set<string>>()
 
-  readonly #responderRoutes = new Map<CommandMessageClass, Set<string>>()
+  readonly #responderRoutes = new Map<CommandMessageFactory, Set<string>>()
 
-  readonly #interceptorRoutes = new Map<MessageClass, Set<string>>()
+  readonly #interceptorRoutes = new Map<MessageFactory, Set<string>>()
 
   /**
    * Records that a participant is interested in a message class so
@@ -46,7 +46,7 @@ export class MessageBus {
    * when a subscriber is added; returns a disposer that drops the routing entry.
    * @internal
    */
-  readonly on = <M extends MessageClass>(
+  readonly on = <M extends MessageFactory>(
     name: string,
     messageClass: M,
   ): (() => void) => {
@@ -64,7 +64,7 @@ export class MessageBus {
    */
   readonly register = <T>(
     name: string,
-    commandClass: CommandMessageClass<T>,
+    commandClass: CommandMessageFactory<T>,
   ): (() => void) => {
     const routes = getOrInsert(this.#responderRoutes, commandClass, new Set())
     routes.add(name)
@@ -81,7 +81,7 @@ export class MessageBus {
    */
   readonly intercept = (
     name: string,
-    messageClass: MessageClass,
+    messageClass: MessageFactory,
   ): (() => void) => {
     const routes = getOrInsert(this.#interceptorRoutes, messageClass, new Set())
     routes.add(name)
@@ -127,8 +127,7 @@ export class MessageBus {
    * @internal
    */
   async emit<M extends Message>(message: M): Promise<M | typeof CANCEL> {
-    const interceptorNames =
-      this.#interceptorRoutes.get(message.constructor as MessageClass) ?? []
+    const interceptorNames = this.#interceptorRoutes.get(message.$factory) ?? []
 
     for (const name of interceptorNames) {
       const result = await this.#participants
@@ -138,9 +137,7 @@ export class MessageBus {
       else if (result) message = result as M
     }
 
-    const subscriberNames = this.#subscriberRoutes.get(
-      message.constructor as MessageClass,
-    )
+    const subscriberNames = this.#subscriberRoutes.get(message.$factory)
     if (!subscriberNames?.size) return message
 
     for (const name of subscriberNames)
@@ -160,11 +157,11 @@ export class MessageBus {
    */
   async invoke<T>(
     command: CommandMessage<T>,
-    context: ResponderContext<CommandMessageClass<T>>,
+    context: ResponderContext<CommandMessageFactory<T>>,
     reportError: ResponderErrorHandler,
   ): Promise<void> {
     const responderNames = this.#responderRoutes.get(
-      command.constructor as CommandMessageClass<T>,
+      command.$factory as CommandMessageFactory<T>,
     )
 
     if (!responderNames?.size) return

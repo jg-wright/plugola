@@ -1,65 +1,80 @@
-import { type Codec } from './Codec.ts'
-import { type Named, NamedMixin } from './Named.ts'
+import { type Named } from './Named.ts'
 
 /**
- * Defines a data {@link Message} class from a payload type `T`, in one call. The
- * returned class:
+ * Defines a data {@link Message} factory from a payload type `T`, in one call.
+ * Calling the returned factory builds a message — a plain object that _is_ its
+ * payload `T` plus framework metadata. There is no `new` and no class: a message
+ * is an interface, and its factory is the sole way to make one.
  *
- * - takes its whole payload as a single constructor argument and spreads it onto
- *   the instance (`new Clicked({ x, y }).x`), so its fields _are_ `T`;
- * - carries its wire name as both a static (`Clicked.$name`) and an instance
- *   property, a single source of truth that replaces the hand-written
- *   `readonly $name = '…'`;
- * - carries its own {@link Codec} as `$encode`/`$decode` statics, so a
- *   {@link MessagingBridge} can serialise an instance without a lookup and
- *   deserialise a payload once it has resolved the name to the class.
+ * The factory:
  *
- * Because the factory owns the constructor shape, the codec is optional: the
- * default `encode` keeps the payload fields (everything not `$`-prefixed) and the
- * default `decode` is `new Class(payload)`. Pass a codec only for non-trivial
- * marshalling (reshaping or versioning the wire form, say).
+ * - takes the whole payload as a single argument and spreads it onto the message
+ *   (`Clicked({ x, y }).x`), so a message's fields _are_ `T`;
+ * - carries its wire name as `Clicked.$name` and stamps it on every message it
+ *   builds — a single source of truth for logging and for addressing on the wire;
+ * - is the routing identity itself: `gateway.on(Clicked, …)` keys off the
+ *   factory, and each message points back at it via `$factory`, so the bus routes
+ *   by factory identity (as it once routed by class identity).
  *
- * The constructor accepts the payload as-is; serializability is enforced where it
- * matters — at `gateway.emit`/`invoke` — not at construction.
+ * The transport codec (`$encode`/`$decode`) is layered on separately, by a
+ * Channel's `MessageRegistry` at registration time — see
+ * {@link makeTransportable}. A factory used only in-process never carries one.
  *
- * This is EIP's *Message Translator* declared at the point of definition. The
- * class is **final** — it is registered and routed by its own identity, so
- * subclassing it would not cross a {@link MessagingBridge}.
+ * This is EIP's *Message Translator* declared at the point of definition. A
+ * factory is **final** identity — it is registered and routed as itself, so
+ * wrapping or re-creating it would not cross a {@link MessagingBridge}.
  *
  * @example
  * ```ts
  * const Clicked = message<{ x: number; y: number }>('clicked')
- * const c = new Clicked({ x: 1, y: 2 })
+ * const c = Clicked({ x: 1, y: 2 })
  * c.x // 1
  * c.$name // 'clicked'
  * ```
  */
-export function message<T extends object>(name: string): MessageClass<T> {
-  class Generated extends NamedMixin(Message<T>, name) {}
-
-  return Generated as MessageClass<T>
+export function message<T extends object>(name: string): MessageFactory<T> {
+  return createFactory(name) as MessageFactory<T>
 }
 
 /**
- * The shape every message on the bus shares. Messages are class instances —
- * subscribers subscribe to a message's *class* (its constructor), and the bus
- * routes by that class identity, so two messages of the same class are delivered
- * to the same subscribers. `$name` is a human-readable label for logging, and the
- * key a message is addressed by on the wire when bridging.
+ * The metadata every message on the bus shares, over and above its payload: a
+ * message is its payload `T` spread onto a plain object, plus `$name` (a
+ * human-readable label, and the key it is addressed by on the wire) and
+ * `$factory` (the factory that built it, which the bus routes by). This type is
+ * deliberately payload-agnostic — the payload rides along as `& T` on a
+ * {@link MessageFactory}'s output — so `Message` stays free of the variance a
+ * payload type parameter would impose. Messages are **not** constructed with
+ * `new`; call a {@link MessageFactory}.
  */
-export abstract class Message<T extends object = any> implements Named {
-  abstract $name: string
-  constructor(payload: T) {
-    Object.assign(this, payload)
-  }
+export interface Message extends Named {
+  /** The factory that built this message — the bus's routing identity. */
+  readonly $factory: MessageFactory
 }
 
 /**
- * The constructor type of a {@link Message}, as returned by {@link message}. This
- * is what you pass to `gateway.on`, `gateway.intercept`, etc. — the class itself,
- * not an instance — and what a {@link MessagingBridge} reads `$name`/`$encode`/
- * `$decode` from.
+ * A message factory, as returned by {@link message}. Call it to build a message;
+ * pass the factory itself to `gateway.on`, `gateway.intercept`, etc. — it, not an
+ * instance, is the routing key, and a {@link MessagingBridge} reads `$name` (and,
+ * once registered, `$encode`/`$decode`) from it.
  */
-export interface MessageClass<T extends object = any> extends Named {
-  new (payload: T): Message & T
+export interface MessageFactory<T extends object = any> extends Named {
+  (payload: T): Message & T
+}
+
+/** The message a factory builds — its payload plus {@link Message} metadata. */
+export type MessageOf<F> = F extends (...args: any) => infer M ? M : never
+
+/**
+ * Builds a factory that stamps each message with its `$name` and a `$factory`
+ * back-reference. Shared by {@link message} and {@link command}: a command
+ * factory is identical at runtime — what makes it a command is being registered
+ * as one (see {@link MessageRegistry}), not any flag it carries.
+ */
+export function createFactory(name: string): MessageFactory {
+  const factory = ((payload: object) => ({
+    ...payload,
+    $name: name,
+    $factory: factory,
+  })) as MessageFactory
+  return Object.assign(factory, { $name: name })
 }

@@ -1,23 +1,21 @@
-import { message, Message } from './Message.ts'
-import { type Named, NamedMixin } from './Named.ts'
+import { createFactory, type Message } from './Message.ts'
+import { type Named } from './Named.ts'
 
 /**
- * Like {@link message}, but defines a {@link CommandMessage} that streams `R`
- * values back from responders. `T` is the (serializable) payload; `R` is the
+ * Like {@link message}, but defines a {@link CommandMessage} factory that streams
+ * `R` values back from responders. `T` is the (serializable) payload; `R` is the
  * response value type surfaced through `gateway.invoke(...).collect()`.
  *
  * @example
  * ```ts
  * const ListFiles = command<{ dir: string }, string>('list-files')
- * const files = await gateway.invoke(new ListFiles({ dir: '/tmp' })).collect()
+ * const files = await gateway.invoke(ListFiles({ dir: '/tmp' })).collect()
  * ```
  */
 export function command<T extends object, R>(
   name: string,
-): CommandMessageClass<R, T> {
-  class Generated extends NamedMixin(CommandMessage<R>, name) {}
-
-  return Generated as CommandMessageClass<R, T>
+): CommandMessageFactory<R, T> {
+  return createFactory(name) as unknown as CommandMessageFactory<R, T>
 }
 
 /**
@@ -26,31 +24,29 @@ export function command<T extends object, R>(
  * values that responders `send`. Because a command message is also a message, it
  * is first emitted (and can be intercepted) before it is invoked.
  *
- * @typeParam T - the type of each value responders stream back.
+ * @typeParam R - the type of each value responders stream back.
  */
-export abstract class CommandMessage<
-  R = unknown,
-  T extends object = any,
-> extends Message<T> {
-  /** Phantom field carrying `T` for inference; never assigned at runtime. */
-  declare $responseType: R
+export interface CommandMessage<R = unknown> extends Message {
+  /** Phantom field carrying `R` for inference; never present at runtime. */
+  readonly $responseType: R
 }
 
-/** The constructor type of a {@link CommandMessage}, as returned by {@link command}. */
-export interface CommandMessageClass<
+/** The factory of a {@link CommandMessage}, as returned by {@link command}. */
+export interface CommandMessageFactory<
   R = unknown,
   T extends object = any,
 > extends Named {
-  new (payload: T): CommandMessage<R, T> & T
+  (payload: T): CommandMessage<R> & T
 }
 
 /**
- * Extracts the streamed value type `T` from a {@link CommandMessage} instance or
- * its class — e.g. `ResponseType<typeof ListFiles>` is `string`.
+ * Extracts the streamed value type `R` from a {@link CommandMessage} or its
+ * {@link CommandMessageFactory} — e.g. `ResponseType<typeof ListFiles>` is
+ * `string`.
  */
-export type ResponseType<E extends CommandMessage | CommandMessageClass> =
+export type ResponseType<E extends CommandMessage | CommandMessageFactory> =
   E extends CommandMessage<infer V>
     ? V
-    : E extends CommandMessageClass<infer V>
+    : E extends (...args: any) => CommandMessage<infer V>
       ? V
       : never

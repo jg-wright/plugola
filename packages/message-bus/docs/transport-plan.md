@@ -11,15 +11,15 @@ process; a **Messaging Bridge** (EIP) translates at the boundary.
 
 ## EIP naming
 
-| Piece                              | EIP pattern            | Symbol                                             |
-| ---------------------------------- | ---------------------- | -------------------------------------------------- |
-| The wire                           | Message Channel        | `Channel` (+ `Frame`)                              |
-| Class definition (routing)         | —                      | `message()` / `command()`                          |
-| Codec definition (wire)            | Message Translator     | `registry.registerMessage()` / `registerCommand()` |
-| Name→class contract & wire surface | —                      | `MessageRegistry`                                  |
-| Couples two buses over a channel   | **Messaging Bridge**   | `MessagingBridge`                                  |
-| Request/reply matching             | Correlation Identifier | `correlationId` on `Frame`                         |
-| Concrete transports                | Channel Adapter        | `PostMessageChannel`, … (own packages)             |
+| Piece                                | EIP pattern            | Symbol                                             |
+| ------------------------------------ | ---------------------- | -------------------------------------------------- |
+| The wire                             | Message Channel        | `Channel` (+ `Frame`)                              |
+| Factory definition (routing)         | —                      | `message()` / `command()`                          |
+| Codec definition (wire)              | Message Translator     | `registry.registerMessage()` / `registerCommand()` |
+| Name→factory contract & wire surface | —                      | `MessageRegistry`                                  |
+| Couples two buses over a channel     | **Messaging Bridge**   | `MessagingBridge`                                  |
+| Request/reply matching               | Correlation Identifier | `correlationId` on `Frame`                         |
+| Concrete transports                  | Channel Adapter        | `PostMessageChannel`, … (own packages)             |
 
 ## Confirmed decisions
 
@@ -36,38 +36,39 @@ process; a **Messaging Bridge** (EIP) translates at the boundary.
    in practice — `crypto.randomUUID` is a global in every target runtime, and the
    default is far less ceremony at the call site.) Ids need only be unique among
    currently-pending commands on one bridge instance.
-5. **Registry messages are data-only** (the generated class is final; extending
-   it would break identity routing across the bridge). Hand-written class +
-   explicit registration is the documented escape hatch.
+5. **Registry messages are data-only** (a factory is final identity; wrapping or
+   re-creating it would break identity routing across the bridge). Hand-written
+   factory + explicit registration is the documented escape hatch.
 6. **Codec is layered on at registration, not baked into every message.**
-   `message()`/`command()` return the core `MessageClass`/`CommandMessageClass`
+   `message()`/`command()` return the core `MessageFactory`/`CommandMessageFactory`
    types, carrying only `$name` (identity + routing). The transport codec
-   (`$encode`/`$decode`) is added by `MessageRegistry` when a class is registered
-   for bridging (via `TransportableMixin`), so the registered class is
-   `MessageClass<T> & Transportable<T>`. This resolves the original cost that the
+   (`$encode`/`$decode`) is added by `MessageRegistry` when a factory is registered
+   for bridging (via `makeTransportable`), so the registered factory is
+   `MessageFactory<T> & Transportable<T>`. This resolves the original cost that the
    core message type was coupled to the codec: in-process-only users define plain
-   messages and never touch a codec; only classes that cross a bridge acquire one.
-   Factory-only authoring still holds; no hand-written `implements Message`
-   classes. Remaining watch item: the payload sits in the (contravariant)
-   constructor parameter, so watch for "no common supertype" friction at routing
-   boundaries.
+   messages and never touch a codec; only factories that cross a bridge acquire
+   one. Factory-only authoring still holds; a message is a plain object built by
+   its factory, never a `new`-constructed class. `Message` itself is
+   payload-agnostic (the payload rides along as `& T` on the factory's output), so
+   it carries no payload type parameter and the earlier contravariance friction at
+   routing boundaries no longer applies.
 
 ## File layout
 
 ```
 packages/message-bus/src/
   Message/
-    Message.ts            # message() factory + Message base (identity only)
-    CommandMessage.ts     # command() factory + CommandMessage base
-    Named.ts              # NamedMixin — $name static + instance
+    Message.ts            # message() factory + Message/MessageFactory types (identity only)
+    CommandMessage.ts     # command() factory + CommandMessage/CommandMessageFactory types
+    Named.ts              # Named interface — the $name contract
     Codec.ts              # Codec type + defaultEncode
-    Transportable.ts      # TransportableMixin — adds $encode/$decode
+    Transportable.ts      # makeTransportable — adds $encode/$decode
   Channel/
     Channel.ts            # Channel interface + Frame union
     LoopbackChannel.ts    # in-memory channel for tests
     MessageRegistry.ts    # registerMessage()/registerCommand() → creates + wraps + registers
   Bridge/
-    MessagingBridge.ts    # subscribes to registry.classes; encodes out / decodes in
+    MessagingBridge.ts    # relays registry.messageFactories one-way, commandFactories as request/reply
   index.ts                # + export Channel, MessageRegistry, MessagingBridge, message, command
 ```
 
@@ -77,33 +78,41 @@ packages/message-bus/src/
 
 ### `message()` / `command()` — `Message/Message.ts`, `Message/CommandMessage.ts`
 
-Generated classes own the constructor shape and carry identity only:
+Each returns a **factory** you call (no `new`) to build a message — a plain
+object stamped with `$name` and a `$factory` back-reference. The factory carries
+identity only:
 
-- Static + instance `$name` (instance via prototype). No codec — routing only.
-- Payload constrained by `Serializable<T>` at the constructor boundary.
-- Returned class is **final** (data messages only — decision 5).
-- `command<T, R>` generates a `CommandMessage<R>` subclass carrying
-  `$responseType`.
+- `$name` on the factory and on every message it builds. No codec — routing only.
+- The factory itself is the routing key; each message points back at it via
+  `$factory` (replacing the old `message.constructor`).
+- Payload constrained by `Serializable<T>` at the `emit`/`invoke` boundary.
+- A factory is **final** identity (data messages only — decision 5).
+- `command<T, R>` returns a `CommandMessageFactory<R, T>` building messages typed
+  `CommandMessage<R>` carrying `$responseType`. It is identical to a message
+  factory at runtime — what makes it a command is being registered as one (the
+  registry keeps messages and commands in separate buckets), not any flag.
 
-### `TransportableMixin` — `Message/Transportable.ts`
+### `makeTransportable` — `Message/Transportable.ts`
 
-Layers the codec (`$encode`/`$decode` statics) onto a class, given an optional
-partial `Codec`. Applied by the registry, not by the factories, so only bridged
-classes carry it:
+Layers the codec (`$encode`/`$decode`) onto a factory, given an optional partial
+`Codec`. Applied by the registry, not by the factories, so only bridged factories
+carry it:
 
 - Default `encode` = own non-`$` enumerable fields (`defaultEncode` in
-  `Message/Codec.ts`); default `decode` = `new Class(payload)`.
+  `Message/Codec.ts`); default `decode` = `factory(payload)`.
 - A supplied `codec.encode`/`codec.decode` overrides either half.
 
 ### `MessageRegistry` — `Channel/MessageRegistry.ts`
 
 Creation = registration; the registry is the shared contract _and_ the bridge's
-forward set. `registerMessage`/`registerCommand` create the class (via
-`message()`/`command()`), wrap it with `TransportableMixin` (so it becomes
-`MessageClass<T> & Transportable<T>`), and record it — in one act. Lives in a
+forward set. `registerMessage`/`registerCommand` create the factory (via
+`message()`/`command()`), wrap it with `makeTransportable` (so it becomes
+`MessageFactory<T> & Transportable<T>`), and record it — in one act. Lives in a
 module both ends import; each process gets its own instance with identical
-contents. Throws on duplicate `$name`. Exposes `classFor(name)` (decode) and
-`classes` (the bridge's subscribe set), both yielding transportable classes.
+contents. Messages and commands go in separate buckets. Throws on duplicate
+`$name` (across both). Exposes `factoryFor(name)` (decode — kind-agnostic) and
+`messageFactories` / `commandFactories` (the bridge's two subscribe sets), all
+yielding transportable factories.
 
 ### `Channel` + `Frame` — `Channel/Channel.ts`
 
@@ -137,17 +146,18 @@ testable with no worker/socket.
 new MessagingBridge(bus, channel, registry, { correlationId, name = 'bridge' })
 ```
 
-- **Outbound message**: `gateway.on(C)` per `registry.classes`; on fire, send
-  `{kind:'message', name: C.$name, payload: C.$encode(msg)}`. Encode needs no
-  registry — the class carries it.
+- **Outbound message**: `gateway.on(C)` per `registry.messageFactories`; on fire,
+  send `{kind:'message', name: C.$name, payload: C.$encode(msg)}`. Encode needs no
+  registry — the factory carries it. Commands come from
+  `registry.commandFactories`, relayed as request/reply below.
 - **Outbound command**: `gateway.register(C)` responder mints a `correlationId`,
   sends a `command` frame, and returns a promise held in `#pending`; inbound
   `response*` frames drive the responder's `send`/resolve/reject.
-- **Inbound**: `channel.receive` → `registry.classFor(name).$decode(payload)` →
+- **Inbound**: `channel.receive` → `registry.factoryFor(name).$decode(payload)` →
   re-`emit` (message) or `invoke().iterate()` and stream `response*` back.
-- **Echo/loop avoidance**: decoded instances carry a module `FROM_WIRE` symbol
+- **Echo/loop avoidance**: decoded messages carry a module `FROM_WIRE` symbol
   (non-enumerable, never serialised); every bridge's subscriber/responder skips
-  tagged instances (decision 1).
+  tagged messages (decision 1).
 - **Abort**: caller cancel → `abort` frame → remote `invoke`'s signal aborts;
   teardown rejects all `#pending` and disposes `receive`.
 
@@ -160,13 +170,13 @@ the generated `$name`/`$encode`/`$decode`.
 
 ## Test strategy (all on `LoopbackChannel`)
 
-- **Factories** (`.test.ts` + `.test-d.ts`): static/instance `$name`; payload
-  spread; class-identity routing; `Serializable` rejects non-JSON payloads;
-  `command` response type flows to `invoke().collect()`. (No codec here — the
-  factories carry identity only.)
-- **Registry**: `register` returns a usable, transportable class; default
+- **Factories** (`.test.ts` + `.test-d.ts`): `$name` on factory and message;
+  payload spread; factory-identity routing; `Serializable` rejects non-JSON
+  payloads; `command` response type flows to `invoke().collect()`. (No codec here
+  — the factories carry identity only.)
+- **Registry**: `register` returns a usable, transportable factory; default
   encode/decode round-trip; custom codec; duplicate name throws;
-  `classes`/`classFor`.
+  `messageFactories`/`commandFactories`/`factoryFor`.
 - **Bridge — messages**: one-way; round-trip; no echo; filters apply;
   pause/resume buffering intact.
 - **Bridge — commands**: remote-only scatter-gather; mixed local+remote
@@ -185,7 +195,7 @@ the generated `$name`/`$encode`/`$decode`.
 6. `MessagingBridge` — abort + error envelopes. Tests.
 7. `index.ts` exports + docs. **Done:** exported the full transport surface; the
    README's examples were migrated from hand-written message classes (no longer
-   valid under factory-only `MessageClass`) to `message()`/`command()`, and a
+   valid under factory-only `MessageFactory`) to `message()`/`command()`, and a
    transports section was added.
 8. Concrete adapters (`PostMessageChannel`, `WebSocketChannel`) — separate
    packages, follow-up.

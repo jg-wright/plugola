@@ -4,8 +4,11 @@
 
 import { expectTypeOf } from 'vitest'
 import { MessageRegistry } from '../src/Channel/MessageRegistry.ts'
-import type { MessageClass } from '../src/Message/Message.ts'
-import type { CommandMessageClass } from '../src/Message/CommandMessage.ts'
+import type { MessageFactory } from '../src/Message/Message.ts'
+import type {
+  CommandMessageFactory,
+  ResponseType,
+} from '../src/Message/CommandMessage.ts'
 import type { Transportable } from '../src/Message/Transportable.ts'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 
@@ -13,21 +16,33 @@ const registry = new MessageRegistry()
 
 // register() returns the precise message class type ...
 const Clicked = registry.registerMessage<{ x: number; y: number }>('clicked')
-expectTypeOf(Clicked).toExtend<MessageClass<{ x: number; y: number }>>()
-expectTypeOf(new Clicked({ x: 1, y: 2 }).x).toEqualTypeOf<number>()
+expectTypeOf(Clicked).toExtend<MessageFactory<{ x: number; y: number }>>()
+expectTypeOf(Clicked({ x: 1, y: 2 }).x).toEqualTypeOf<number>()
 
 // ... and command() the precise command class type, response type intact.
 const ListFiles = registry.registerCommand<{ dir: string }, string>(
   'list-files',
 )
-expectTypeOf(ListFiles).toExtend<CommandMessageClass<string, { dir: string }>>()
+expectTypeOf(ListFiles).toExtend<
+  CommandMessageFactory<string, { dir: string }>
+>()
 
 // Registering a message is what makes it Transportable — the `$encode`/`$decode`
 // the bridge reads live on the registered class, not on the bare factory output.
 expectTypeOf(Clicked).toExtend<Transportable<{ x: number; y: number }>>()
 expectTypeOf(ListFiles).toExtend<Transportable<{ dir: string }>>()
 
+// The response type must survive the `& Transportable<…>` intersection the
+// registry adds — regression: it once collapsed to `unknown` on the responder's
+// `send`, because inferring through the factory's call signature hit `& any`.
+expectTypeOf<ResponseType<typeof ListFiles>>().toEqualTypeOf<string>()
+
 export async function assertRegisteredCommandResponse(gateway: MessageGateway) {
-  const files = await gateway.invoke(new ListFiles({ dir: '/tmp' })).collect()
+  const files = await gateway.invoke(ListFiles({ dir: '/tmp' })).collect()
   expectTypeOf(files).toEqualTypeOf<string[]>()
+
+  // A responder registered for a registry command sees a precisely-typed `send`.
+  gateway.register(ListFiles, (_command, { send }) => {
+    expectTypeOf(send).toEqualTypeOf<(value: string) => void>()
+  })
 }

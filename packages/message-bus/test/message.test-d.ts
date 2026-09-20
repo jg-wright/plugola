@@ -5,10 +5,10 @@
 import { expectTypeOf } from 'vitest'
 import { message } from '../src/Message/Message.ts'
 import { command } from '../src/Message/CommandMessage.ts'
-import type { Message, MessageClass } from '../src/Message/Message.ts'
-import {
+import type { Message, MessageFactory } from '../src/Message/Message.ts'
+import type {
   CommandMessage,
-  type CommandMessageClass,
+  CommandMessageFactory,
 } from '../src/Message/CommandMessage.ts'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 
@@ -16,7 +16,7 @@ import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 
 const Clicked = message<{ x: number; y: number }>('clicked')
 
-const clicked = new Clicked({ x: 1, y: 2 })
+const clicked = Clicked({ x: 1, y: 2 })
 expectTypeOf(clicked.x).toEqualTypeOf<number>()
 expectTypeOf(clicked.y).toEqualTypeOf<number>()
 expectTypeOf(clicked.$name).toEqualTypeOf<string>()
@@ -27,21 +27,21 @@ expectTypeOf(Clicked.$name).toEqualTypeOf<string>()
 
 const ListFiles = command<{ dir: string }, string>('list-files')
 
-const listFiles = new ListFiles({ dir: '/tmp' })
+const listFiles = ListFiles({ dir: '/tmp' })
 expectTypeOf(listFiles.dir).toEqualTypeOf<string>()
 expectTypeOf(listFiles).toExtend<CommandMessage<string>>()
 
 // --- factory outputs are usable as the bus's general class types -------------
 
 expectTypeOf<typeof Clicked>().toExtend<
-  MessageClass<{ x: number; y: number }>
+  MessageFactory<{ x: number; y: number }>
 >()
 expectTypeOf<typeof ListFiles>().toExtend<
-  CommandMessageClass<string, { dir: string }>
+  CommandMessageFactory<string, { dir: string }>
 >()
 
 export async function assertResponseType(gateway: MessageGateway) {
-  const files = await gateway.invoke(new ListFiles({ dir: '/tmp' })).collect()
+  const files = await gateway.invoke(ListFiles({ dir: '/tmp' })).collect()
   expectTypeOf(files).toEqualTypeOf<string[]>()
 }
 
@@ -51,13 +51,13 @@ const Occurred = message<{ at: Date }>('occurred')
 const RenderInto = command<{ target: Widget }, void>('render-into')
 
 export function assertSerializablePayloads(gateway: MessageGateway) {
-  gateway.emit(new Clicked({ x: 1, y: 2 }))
+  gateway.emit(Clicked({ x: 1, y: 2 }))
 
   // @ts-expect-error a Date is not JSON-serializable
-  gateway.emit(new Occurred({ at: new Date() }))
+  gateway.emit(Occurred({ at: new Date() }))
 
   // @ts-expect-error the Widget payload is not serializable
-  gateway.invoke(new RenderInto({ target: new Widget('root') }))
+  gateway.invoke(RenderInto({ target: new Widget('root') }))
 }
 
 // --- fixtures --------------------------------------------------------------

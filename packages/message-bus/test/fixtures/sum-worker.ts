@@ -11,4 +11,4 @@ bus.resume()
 
 // Announce readiness across the bridge so the main thread knows the worker's
 // responder is wired up before it invokes.
-app.emit(new Ready({ from: 'worker' }))
+app.emit(Ready({ from: 'worker' }))

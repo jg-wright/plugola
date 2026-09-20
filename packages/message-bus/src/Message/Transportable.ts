@@ -1,22 +1,22 @@
 import { type Codec, defaultEncode } from './Codec.ts'
+import type { MessageFactory, MessageOf } from './Message.ts'
 
-export function TransportableMixin<
-  C extends abstract new (...args: any[]) => any,
->(
-  Class: C,
-  codec?: Partial<Codec<InstanceType<C>>>,
-): C & Transportable<InstanceType<C>> {
-  abstract class TransportableMixin extends Class {
-    static readonly $encode = codec?.encode ?? defaultEncode
-    static $decode(payload: any): InstanceType<C> {
-      if (codec?.decode) return codec.decode(payload)
-      return new (this as unknown as new (payload: any) => InstanceType<C>)(
-        payload,
-      )
-    }
-  }
-
-  return TransportableMixin
+/**
+ * Layers a transport {@link Codec} onto a message factory — the `$encode` /
+ * `$decode` a {@link MessagingBridge} uses to put a message on the wire and
+ * rebuild it on the far side. It mutates and returns the same factory (identity
+ * is unchanged), so registering a factory is what makes it transportable. The
+ * default `encode` keeps the payload (non-`$` fields) and the default `decode`
+ * rebuilds the message by calling the factory.
+ */
+export function makeTransportable<F extends MessageFactory>(
+  factory: F,
+  codec?: Partial<Codec<MessageOf<F>>>,
+): F & Transportable<MessageOf<F>> {
+  const transportable = factory as F & Transportable<MessageOf<F>>
+  transportable.$encode = codec?.encode ?? defaultEncode
+  transportable.$decode = codec?.decode ?? ((payload: any) => factory(payload))
+  return transportable
 }
 
 export interface Transportable<T> {

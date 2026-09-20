@@ -1,30 +1,34 @@
-import { message, type Message, type MessageClass } from '../Message/Message.ts'
+import {
+  message,
+  type Message,
+  type MessageFactory,
+} from '../Message/Message.ts'
 import {
   command,
   type CommandMessage,
-  type CommandMessageClass,
+  type CommandMessageFactory,
 } from '../Message/CommandMessage.ts'
 import type { Codec } from '../Message/Codec.ts'
 import {
-  TransportableMixin,
+  makeTransportable,
   type Transportable,
 } from '../Message/Transportable.ts'
 
 /**
- * The set of message classes that cross a {@link MessagingBridge}, and the
- * contract two buses share to name them. Because a class identity cannot cross a
- * runtime boundary, the registry maps each `$name` to its class so an inbound
- * frame can be resolved back to a constructor and decoded.
+ * The set of message factories that cross a {@link MessagingBridge}, and the
+ * contract two buses share to name them. Because a factory identity cannot cross
+ * a runtime boundary, the registry maps each `$name` to its factory so an inbound
+ * frame can be resolved back to a factory and decoded.
  *
  * Defining a message _is_ registering it: {@link MessageRegistry.registerMessage}
- * and {@link MessageRegistry.registerCommand} create the class (via
+ * and {@link MessageRegistry.registerCommand} create the factory (via
  * {@link message} / {@link command}) and record it in one act, so a bridged
  * message can't be forgotten. The registry doubles as the bridge's forward set —
- * every class it holds is one the bridge subscribes to and relays.
+ * every factory it holds is one the bridge subscribes to and relays.
  *
  * Both ends of a bridge build an equivalent registry from a shared module; the
- * classes are distinct objects per runtime (identity routes locally, names cross
- * the wire).
+ * factories are distinct objects per runtime (identity routes locally, names
+ * cross the wire).
  *
  * @example
  * ```ts
@@ -34,51 +38,75 @@ import {
  * ```
  */
 export class MessageRegistry {
-  readonly #byName = new Map<string, MessageClass<any> & Transportable<any>>()
+  readonly #messages = new Map<
+    string,
+    MessageFactory<any> & Transportable<any>
+  >()
+
+  readonly #commands = new Map<
+    string,
+    CommandMessageFactory<any, any> & Transportable<any>
+  >()
 
   /**
-   * Defines a data {@link Message} class under `name` and registers it, in one
-   * act. Throws if `name` is already registered.
+   * Defines a data {@link Message} factory under `name` and registers it, in one
+   * act. Throws if `name` is already registered (as either a message or command).
    *
-   * @returns the created class — use it to `emit`/`on` as usual.
+   * @returns the created factory — call it to build messages, and `emit`/`on`
+   * with it as usual.
    */
   registerMessage<T extends object>(
     name: string,
-    codec?: Partial<Codec<T & Message>>,
-  ): MessageClass<T> & Transportable<T> {
-    const messageClass = TransportableMixin(message<T>(name), codec)
-    this.#add(name, messageClass)
-    return messageClass
+    codec?: Partial<Codec<Message & T>>,
+  ): MessageFactory<T> & Transportable<T> {
+    this.#assertUnused(name)
+    const factory = makeTransportable(message<T>(name), codec)
+    this.#messages.set(name, factory)
+    return factory
   }
 
   /**
-   * Defines a {@link CommandMessage} class under `name` and registers it, in one
-   * act. Throws if `name` is already registered.
+   * Defines a {@link CommandMessage} factory under `name` and registers it, in
+   * one act. Throws if `name` is already registered (as either a message or
+   * command).
    *
-   * @returns the created class — use it to `invoke`/`register` responders as usual.
+   * @returns the created factory — call it to build commands, and
+   * `invoke`/`register` responders with it as usual.
    */
   registerCommand<T extends object, R>(
     name: string,
-    codec?: Partial<Codec<CommandMessage<R, T> & T>>,
-  ): CommandMessageClass<R, T> & Transportable<CommandMessage<R, T> & T> {
-    const commandClass = TransportableMixin(command<T, R>(name), codec)
-    this.#add(name, commandClass)
-    return commandClass
+    codec?: Partial<Codec<CommandMessage<R> & T>>,
+  ): CommandMessageFactory<R, T> & Transportable<CommandMessage<R> & T> {
+    this.#assertUnused(name)
+    const factory = makeTransportable(command<T, R>(name), codec)
+    this.#commands.set(name, factory)
+    return factory
   }
 
-  /** The class registered under `name`, or `undefined` — the bridge's decode lookup. */
-  classFor(name: string): (MessageClass<any> & Transportable<any>) | undefined {
-    return this.#byName.get(name)
+  /**
+   * The factory registered under `name` — message or command — or `undefined`.
+   * The bridge's decode lookup, which doesn't care which kind it is.
+   */
+  factoryFor(
+    name: string,
+  ): (MessageFactory<any> & Transportable<any>) | undefined {
+    return this.#messages.get(name) ?? this.#commands.get(name)
   }
 
-  /** Every registered class — the bridge's forward set (what it subscribes to and relays). */
-  get classes(): Iterable<MessageClass<any> & Transportable<any>> {
-    return this.#byName.values()
+  /** Every registered message factory — the bridge relays these one-way. */
+  get messageFactories(): Iterable<MessageFactory<any> & Transportable<any>> {
+    return this.#messages.values()
   }
 
-  #add(name: string, messageClass: MessageClass<any> & Transportable<any>) {
-    if (this.#byName.has(name))
+  /** Every registered command factory — the bridge relays these as request/reply. */
+  get commandFactories(): Iterable<
+    CommandMessageFactory<any, any> & Transportable<any>
+  > {
+    return this.#commands.values()
+  }
+
+  #assertUnused(name: string) {
+    if (this.#messages.has(name) || this.#commands.has(name))
       throw new Error(`Message "${name}" is already registered`)
-    this.#byName.set(name, messageClass)
   }
 }

@@ -1,4 +1,4 @@
-import type { Message, MessageClass } from '../Message/Message.ts'
+import type { Message, MessageFactory } from '../Message/Message.ts'
 import type { Filter, FilterEntries, FilterPredicate } from '../Filter.ts'
 
 /**
@@ -8,14 +8,16 @@ import type { Filter, FilterEntries, FilterPredicate } from '../Filter.ts'
  * callback only when the message matches the filter.
  */
 export class SelectivePerformer<M extends Message> {
-  readonly #filterEntries: FilterEntries<MessageClass>
+  readonly #filterEntries: FilterEntries<MessageFactory>
   readonly #performer: (message: M, ...args: unknown[]) => any
 
   constructor(
-    filter: Filter<MessageClass>,
+    filter: Filter<MessageFactory>,
     performer: (message: M, ...args: unknown[]) => any,
   ) {
-    this.#filterEntries = Object.entries(filter) as FilterEntries<MessageClass>
+    this.#filterEntries = Object.entries(
+      filter,
+    ) as FilterEntries<MessageFactory>
     this.#performer = performer
   }
 
@@ -26,7 +28,7 @@ export class SelectivePerformer<M extends Message> {
   #filter(message: M) {
     return this.#filterEntries.every(([key, value]) =>
       typeof value === 'function'
-        ? (value as FilterPredicate<MessageClass>)(message)
+        ? (value as FilterPredicate<MessageFactory>)(message)
         : value === message[key as keyof M],
     )
   }

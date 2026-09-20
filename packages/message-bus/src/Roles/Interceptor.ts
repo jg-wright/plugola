@@ -1,4 +1,4 @@
-import type { MessageClass } from '../Message/Message.ts'
+import type { MessageFactory, MessageOf } from '../Message/Message.ts'
 
 /**
  * Inspects a message before subscribers see it and may transform or cancel it.
@@ -10,8 +10,8 @@ import type { MessageClass } from '../Message/Message.ts'
  * data makes it a *Content Enricher*, stripping data a *Content Filter* — those
  * are uses of an interceptor, not the whole of it.
  */
-export interface Interceptor<M extends MessageClass> {
-  (message: InstanceType<M>): InterceptorResult<M>
+export interface Interceptor<M extends MessageFactory> {
+  (message: MessageOf<M>): InterceptorResult<M>
 }
 
 /**
@@ -21,11 +21,11 @@ export interface Interceptor<M extends MessageClass> {
  * - {@link CANCEL} — drop the message entirely;
  * - a promise of any of the above.
  */
-export type InterceptorResult<M extends MessageClass> =
+export type InterceptorResult<M extends MessageFactory> =
   | void
-  | InstanceType<M>
+  | MessageOf<M>
   | typeof CANCEL
-  | Promise<void | InstanceType<M> | typeof CANCEL>
+  | Promise<void | MessageOf<M> | typeof CANCEL>
 
 /**
  * Returned by an interceptor to stop a message dead: no further interceptors run

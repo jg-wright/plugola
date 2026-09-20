@@ -1,7 +1,7 @@
-import type { Message, MessageClass } from '../Message/Message.ts'
+import type { Message, MessageFactory, MessageOf } from '../Message/Message.ts'
 import type {
   CommandMessage,
-  CommandMessageClass,
+  CommandMessageFactory,
   ResponseType,
 } from '../Message/CommandMessage.ts'
 import { CANCEL } from '../Roles/Interceptor.ts'
@@ -24,7 +24,7 @@ import { onAbort } from '../lang/AbortSignal.ts'
  * ({@link MessageGateway.on}, {@link MessageGateway.once},
  * {@link MessageGateway.until}), publishing them ({@link MessageGateway.emit}),
  * transforming them in flight ({@link MessageGateway.intercept}), and the
- * request/stream pattern of {@link MessageGateway.register} +
+ * request/stream pattern of {@link MessageGateway['register']} +
  * {@link MessageGateway.invoke}. It writes the participant's
  * {@link PerformerRegistry} (which the {@link MessageDispatcher} reads) and
  * publishes onto the {@link MessageBus}.
@@ -38,8 +38,8 @@ export class MessageGateway {
 
   readonly #bus: MessageBus
 
-  readonly #invoke: <E extends CommandMessageClass>(
-    command: InstanceType<E>,
+  readonly #invoke: <E extends CommandMessageFactory>(
+    command: MessageOf<E>,
     params: ResponderContext<E>,
     reportError: ResponderErrorHandler,
   ) => Promise<void>
@@ -134,7 +134,7 @@ export class MessageGateway {
    * off() // unsubscribe
    * ```
    */
-  on<M extends MessageClass>(
+  on<M extends MessageFactory>(
     messageClass: M,
     subscriber: Subscriber<M>,
   ): () => void
@@ -143,13 +143,13 @@ export class MessageGateway {
    * Subscribes only to messages matching `filter` (all keys must match — see
    * {@link Filter}).
    */
-  on<M extends MessageClass>(
+  on<M extends MessageFactory>(
     messageClass: M,
     filter: Filter<M>,
     subscriber: Subscriber<M>,
   ): () => void
 
-  on<M extends MessageClass>(
+  on<M extends MessageFactory>(
     messageClass: M,
     filterOrSubscriber: Filter<M> | Subscriber<M>,
     subscriber?: Subscriber<M>,
@@ -169,19 +169,19 @@ export class MessageGateway {
    *
    * @returns a disposer, in case you want to cancel before it ever fires.
    */
-  once<M extends MessageClass>(
+  once<M extends MessageFactory>(
     messageClass: M,
     subscriber: Subscriber<M>,
   ): () => void
 
   /** Fires once for the first message matching `filter`, then unsubscribes. */
-  once<M extends MessageClass>(
+  once<M extends MessageFactory>(
     messageClass: M,
     filter: Filter<M>,
     subscriber: Subscriber<M>,
   ): () => void
 
-  once<M extends MessageClass>(
+  once<M extends MessageFactory>(
     messageClass: M,
     filterOrSubscriber: Filter<M> | Subscriber<M>,
     subscriber?: Subscriber<M>,
@@ -205,10 +205,10 @@ export class MessageGateway {
    * const ready = await gateway.until(AppReady)
    * ```
    */
-  until<M extends MessageClass>(
+  until<M extends MessageFactory>(
     messageClass: M,
     filter: Filter<M> = {},
-  ): Promise<InstanceType<M>> {
+  ): Promise<MessageOf<M>> {
     return new Promise((resolve, reject) => {
       const { aborted, off } = onAbort(reject, this.abortSignal)
       if (!aborted)
@@ -234,19 +234,19 @@ export class MessageGateway {
    * })
    * ```
    */
-  register<E extends CommandMessageClass>(
+  register<E extends CommandMessageFactory>(
     commandClass: E,
     responder: Responder<E>,
   ): () => void
 
   /** Registers a responder only for commands matching `filter`. */
-  register<E extends CommandMessageClass>(
+  register<E extends CommandMessageFactory>(
     commandClass: E,
     filter: Filter<E>,
     responder: Responder<E>,
   ): () => void
 
-  register<E extends CommandMessageClass>(
+  register<E extends CommandMessageFactory>(
     commandClass: E,
     filterOrResponder: Filter<E> | Responder<E>,
     responder?: Responder<E>,
@@ -270,19 +270,19 @@ export class MessageGateway {
    *
    * @returns a disposer that removes the interceptor.
    */
-  intercept<M extends MessageClass>(
+  intercept<M extends MessageFactory>(
     messageClass: M,
     interceptor: Interceptor<M>,
   ): () => void
 
   /** Intercepts only messages matching `filter`. */
-  intercept<M extends MessageClass>(
+  intercept<M extends MessageFactory>(
     messageClass: M,
     filter: Filter<M>,
     interceptor: Interceptor<M>,
   ): () => void
 
-  intercept<M extends MessageClass | CommandMessageClass>(
+  intercept<M extends MessageFactory | CommandMessageFactory>(
     messageClass: M,
     filterOrInterceptor: Filter<M> | Interceptor<M>,
     interceptor?: Interceptor<M>,
@@ -311,9 +311,9 @@ export class MessageGateway {
    *
    * @example
    * ```ts
-   * const files = await gateway.invoke(new ListFiles('/tmp')).collect()
+   * const files = await gateway.invoke(ListFiles('/tmp')).collect()
    *
-   * for await (const file of gateway.invoke(new ListFiles('/tmp')).iterate()) {
+   * for await (const file of gateway.invoke(ListFiles('/tmp')).iterate()) {
    *   console.log(file)
    * }
    * ```
@@ -362,7 +362,7 @@ export class MessageGateway {
   #addPerformer<
     Add extends (
       messageClass: any,
-      filter: Filter<MessageClass>,
+      filter: Filter<MessageFactory>,
       callback: any,
     ) => () => boolean,
   >(
@@ -372,7 +372,7 @@ export class MessageGateway {
     filterOrCallback: unknown,
     callback?: unknown,
   ) {
-    const filter = (callback ? filterOrCallback : {}) as Filter<MessageClass>
+    const filter = (callback ? filterOrCallback : {}) as Filter<MessageFactory>
     callback ??= filterOrCallback
 
     const removePerformer = add(messageClass, filter, callback)
@@ -394,7 +394,7 @@ class ResponseSource<E extends CommandMessage> {
     private readonly command: E,
     private readonly invoke: (
       command: E,
-      params: ResponderContext<CommandMessageClass>,
+      params: ResponderContext<CommandMessageFactory>,
       reportError: ResponderErrorHandler,
     ) => Promise<void>,
     private readonly onError: ResponderErrorHandler,

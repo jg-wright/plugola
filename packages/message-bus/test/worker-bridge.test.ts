@@ -19,6 +19,6 @@ test('bridges messages and commands to a real Worker thread', async () => {
   expect(ready.from).toBe('worker')
 
   // A command invoked here reaches the worker's responder and streams back.
-  const results = await app.invoke(new Sum({ a: 7, b: 8 })).collect()
+  const results = await app.invoke(Sum({ a: 7, b: 8 })).collect()
   expect(results).toEqual([15])
 }, 20_000)
