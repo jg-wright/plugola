@@ -59,8 +59,8 @@ export class MessageRegistry {
    */
   registerCommand<T extends object, R>(
     name: string,
-    codec?: Partial<Codec<CommandMessage<R> & T>>,
-  ): CommandMessageClass<R, T> & Transportable<T> {
+    codec?: Partial<Codec<CommandMessage<R, T> & T>>,
+  ): CommandMessageClass<R, T> & Transportable<CommandMessage<R, T> & T> {
     const commandClass = TransportableMixin(command<T, R>(name), codec)
     this.#add(name, commandClass)
     return commandClass

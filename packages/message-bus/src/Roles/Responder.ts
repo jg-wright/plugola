@@ -16,7 +16,7 @@ import type {
  * })
  * ```
  */
-export interface Responder<E extends CommandMessageClass<unknown>> {
+export interface Responder<E extends CommandMessageClass> {
   (command: InstanceType<E>, context: ResponderContext<E>): void | Promise<void>
 }
 
@@ -29,7 +29,7 @@ export interface Responder<E extends CommandMessageClass<unknown>> {
  * stream. `signal` aborts when the consumer aborts, the gateway aborts, or the
  * stream is otherwise torn down, so long-running work can bail early.
  */
-export interface ResponderContext<E extends CommandMessageClass<unknown>> {
+export interface ResponderContext<E extends CommandMessageClass> {
   send: (value: ResponseType<E>) => void
   signal: AbortSignal
 }

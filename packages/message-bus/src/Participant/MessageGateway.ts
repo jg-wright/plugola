@@ -39,7 +39,7 @@ export class MessageGateway {
 
   readonly #bus: MessageBus
 
-  readonly #invoke: <E extends CommandMessageClass<unknown>>(
+  readonly #invoke: <E extends CommandMessageClass>(
     command: InstanceType<E>,
     params: ResponderContext<E>,
     reportError: ResponderErrorHandler,
@@ -65,7 +65,7 @@ export class MessageGateway {
 
     this.#invoke = participant.queue.queueMethod(
       async (
-        command: CommandMessage<unknown>,
+        command: CommandMessage,
         context: {
           send(value: any): void
           signal: AbortSignal
@@ -223,7 +223,7 @@ export class MessageGateway {
   /**
    * Registers a responder that streams values back for a {@link CommandMessage}.
    * Many participants can register for the same command; a caller's
-   * {@link MessageGateway.invoke} collects the values from all of them (a
+   * {@link MessageGateway['invoke']} collects the values from all of them (a
    * scatter-gather). The command completes for this responder when the function
    * returns (or its promise settles).
    *
@@ -235,19 +235,19 @@ export class MessageGateway {
    * })
    * ```
    */
-  register<E extends CommandMessageClass<unknown>>(
+  register<E extends CommandMessageClass>(
     commandClass: E,
     responder: Responder<E>,
   ): () => void
 
   /** Registers a responder only for commands matching `filter`. */
-  register<E extends CommandMessageClass<unknown>>(
+  register<E extends CommandMessageClass>(
     commandClass: E,
     filter: Filter<E>,
     responder: Responder<E>,
   ): () => void
 
-  register<E extends CommandMessageClass<unknown>>(
+  register<E extends CommandMessageClass>(
     commandClass: E,
     filterOrResponder: Filter<E> | Responder<E>,
     responder?: Responder<E>,
@@ -283,7 +283,7 @@ export class MessageGateway {
     interceptor: Interceptor<M>,
   ): () => void
 
-  intercept<M extends MessageClass | CommandMessageClass<unknown>>(
+  intercept<M extends MessageClass | CommandMessageClass>(
     messageClass: M,
     filterOrInterceptor: Filter<M> | Interceptor<M>,
     interceptor?: Interceptor<M>,
@@ -319,7 +319,7 @@ export class MessageGateway {
    * }
    * ```
    */
-  invoke<E extends CommandMessage<unknown>>(
+  invoke<E extends CommandMessage>(
     command: E & Serializable<E>,
     {
       signal,
@@ -377,7 +377,7 @@ export class MessageGateway {
 }
 
 class ResponseSource<
-  E extends CommandMessage<unknown>,
+  E extends CommandMessage,
 > implements UnderlyingDefaultSource<ResponseType<E>> {
   readonly #producer = new AbortController()
   #settled = false

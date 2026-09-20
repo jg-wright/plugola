@@ -36,10 +36,7 @@ export class MessageBus {
 
   readonly #subscriberRoutes = new Map<MessageClass, Set<string>>()
 
-  readonly #responderRoutes = new Map<
-    CommandMessageClass<unknown>,
-    Set<string>
-  >()
+  readonly #responderRoutes = new Map<CommandMessageClass, Set<string>>()
 
   readonly #interceptorRoutes = new Map<MessageClass, Set<string>>()
 

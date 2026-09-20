@@ -29,7 +29,7 @@ export class PerformerRegistry {
     subscriber: Subscriber<M>,
   ) => this.#add(this.#subscribers, messageClass, filter, subscriber)
 
-  readonly addResponder = <E extends CommandMessageClass<unknown>>(
+  readonly addResponder = <E extends CommandMessageClass>(
     commandClass: E,
     filter: Filter<E>,
     responder: Responder<E>,
@@ -45,7 +45,7 @@ export class PerformerRegistry {
     return this.#subscribers.get(messageClass)
   }
 
-  respondersFor(commandClass: CommandMessageClass<unknown>) {
+  respondersFor(commandClass: CommandMessageClass) {
     return this.#responders.get(commandClass)
   }
 

@@ -41,16 +41,14 @@ export interface CommandMessageClass<
   R = unknown,
   T extends object = any,
 > extends Named {
-  new (payload: T): CommandMessage<R> & T
+  new (payload: T): CommandMessage<R, T> & T
 }
 
 /**
  * Extracts the streamed value type `T` from a {@link CommandMessage} instance or
  * its class — e.g. `ResponseType<typeof ListFiles>` is `string`.
  */
-export type ResponseType<
-  E extends CommandMessage<any> | CommandMessageClass<any>,
-> =
+export type ResponseType<E extends CommandMessage | CommandMessageClass> =
   E extends CommandMessage<infer V>
     ? V
     : E extends CommandMessageClass<infer V>
