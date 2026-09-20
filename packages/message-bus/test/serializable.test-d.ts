@@ -5,9 +5,33 @@
 
 import { expectTypeOf } from 'vitest'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
-import type { Message } from '../src/Message/Message.ts'
-import { CommandMessage } from '../src/Message/CommandMessage.ts'
+import { message } from '../src/Message/Message.ts'
+import { command } from '../src/Message/CommandMessage.ts'
 import type { Serializable } from '../src/Message/Serializable.ts'
+
+// --- fixtures --------------------------------------------------------------
+
+const UserLoggedIn = message<{
+  userId: string
+  roles: string[]
+  meta: { seen: boolean; count: number }
+}>('user-logged-in')
+
+const Clicked = message<{ target: Widget }>('clicked')
+
+const WithCallback = message<{ cb: () => void }>('with-callback')
+
+const WithNested = message<{ payload: { at: Date } }>('with-nested')
+
+const GetWidget = command<{ id: string }, Widget>('get-widget')
+
+const RenderInto = command<{ target: Widget }, void>('render-into')
+
+/** Stands in for a live, non-serializable reference (e.g. an `HTMLElement`). */
+class Widget {
+  constructor(readonly id: string) {}
+  render() {}
+}
 
 // --- Serializable<T> leaves JSON-safe payloads unchanged -------------------
 
@@ -40,70 +64,30 @@ expectTypeOf<Serializable<Widget>>().not.toEqualTypeOf<Widget>()
 // --- emit only accepts a serializable payload ------------------------------
 
 export function assertEmit(gateway: MessageGateway) {
-  gateway.emit(new UserLoggedIn('u1', ['admin'], { seen: true, count: 1 }))
+  gateway.emit(
+    new UserLoggedIn({
+      userId: 'u1',
+      roles: ['admin'],
+      meta: { seen: true, count: 1 },
+    }),
+  )
 
   // @ts-expect-error a Widget instance carries methods, so it is not serializable
-  gateway.emit(new Clicked(new Widget('root')))
+  gateway.emit(new Clicked({ target: new Widget('root') }))
 
   // @ts-expect-error a function will not survive queuing
-  gateway.emit(new WithCallback(() => {}))
+  gateway.emit(new WithCallback({ cb: () => {} }))
 
   // @ts-expect-error the nested Date is not JSON-serializable
-  gateway.emit(new WithNested({ at: new Date() }))
+  gateway.emit(new WithNested({ payload: { at: new Date() } }))
 }
 
 // --- invoke only accepts a serializable command payload --------------------
 
 export function assertInvoke(gateway: MessageGateway) {
   // The command's DOM-shaped *response* is exempt; only its payload is checked.
-  gateway.invoke(new GetWidget('root'))
+  gateway.invoke(new GetWidget({ id: 'root' }))
 
   // @ts-expect-error the Widget payload is not serializable
-  gateway.invoke(new RenderInto(new Widget('x')))
-}
-
-// --- fixtures --------------------------------------------------------------
-
-class UserLoggedIn implements Message {
-  readonly $name = 'user-logged-in'
-  constructor(
-    readonly userId: string,
-    readonly roles: string[],
-    readonly meta: { seen: boolean; count: number },
-  ) {}
-}
-
-class Clicked implements Message {
-  readonly $name = 'clicked'
-  constructor(readonly target: Widget) {}
-}
-
-class WithCallback implements Message {
-  readonly $name = 'with-callback'
-  constructor(readonly cb: () => void) {}
-}
-
-class WithNested implements Message {
-  readonly $name = 'with-nested'
-  constructor(readonly payload: { at: Date }) {}
-}
-
-class GetWidget extends CommandMessage<Widget> {
-  readonly $name = 'get-widget'
-  constructor(readonly id: string) {
-    super()
-  }
-}
-
-class RenderInto extends CommandMessage<void> {
-  readonly $name = 'render-into'
-  constructor(readonly target: Widget) {
-    super()
-  }
-}
-
-/** Stands in for a live, non-serializable reference (e.g. an `HTMLElement`). */
-class Widget {
-  constructor(readonly id: string) {}
-  render() {}
+  gateway.invoke(new RenderInto({ target: new Widget('x') }))
 }
