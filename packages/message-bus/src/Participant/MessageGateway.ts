@@ -380,17 +380,33 @@ class ResponseSource<E extends CommandMessage> {
   #settled = false
   #teardown = (_reason: any) => {}
 
+  readonly #gateway: MessageGateway
+  readonly #command: E
+  readonly #invoke: (
+    command: E,
+    params: ResponderContext<CommandMessageFactory>,
+    reportError: ResponderErrorHandler,
+  ) => Promise<void>
+  readonly #onError: ResponderErrorHandler
+  readonly #signal?: AbortSignal
+
   constructor(
-    private readonly gateway: MessageGateway,
-    private readonly command: E,
-    private readonly invoke: (
+    gateway: MessageGateway,
+    command: E,
+    invoke: (
       command: E,
       params: ResponderContext<CommandMessageFactory>,
       reportError: ResponderErrorHandler,
     ) => Promise<void>,
-    private readonly onError: ResponderErrorHandler,
-    private readonly signal?: AbortSignal,
-  ) {}
+    onError: ResponderErrorHandler,
+    signal?: AbortSignal,
+  ) {
+    this.#gateway = gateway
+    this.#command = command
+    this.#invoke = invoke
+    this.#onError = onError
+    this.#signal = signal
+  }
 
   start(controller: ReadableStreamDefaultController<ResponseType<E>>) {
     let aborted = false
@@ -404,21 +420,21 @@ class ResponseSource<E extends CommandMessage> {
       offGatewayAbort()
       this.#producer.abort(reason)
     }
-    ;({ aborted, off: offGatewayAbort } = this.gateway.onAbort(() =>
+    ;({ aborted, off: offGatewayAbort } = this.#gateway.onAbort(() =>
       this.#abort(controller),
     ))
     if (aborted) return
     ;({ aborted, off: offAbort } = onAbort(
       () => this.#close(controller),
-      this.signal,
+      this.#signal,
     ))
     if (aborted) return
 
     // Completion is the settling of #invoke's promise: it resolves once
     // every responder across every participant has returned, and rejects if
     // one of them threw.
-    this.invoke(
-      this.command,
+    this.#invoke(
+      this.#command,
       {
         send: (value: unknown) => {
           if (this.#settled) return
@@ -426,7 +442,7 @@ class ResponseSource<E extends CommandMessage> {
         },
         signal: this.#producer.signal,
       },
-      this.onError,
+      this.#onError,
     ).then(
       () => this.#close(controller),
       (reason: any) => this.#abort(controller, reason),
@@ -439,13 +455,13 @@ class ResponseSource<E extends CommandMessage> {
 
   #close(controller: ReadableStreamDefaultController<ResponseType<E>>) {
     if (this.#settled) return
-    this.#teardown(this.signal?.reason)
+    this.#teardown(this.#signal?.reason)
     controller.close()
   }
 
   #abort(
     controller: ReadableStreamDefaultController<ResponseType<E>>,
-    reason = this.gateway.abortSignal.reason,
+    reason = this.#gateway.abortSignal.reason,
   ) {
     if (this.#settled) return
     this.#teardown(reason)

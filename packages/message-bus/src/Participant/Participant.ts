@@ -31,13 +31,12 @@ export class Participant {
 
   readonly gateway: MessageGateway
 
+  readonly name: string
+
   readonly #abortController = new AbortController()
 
-  constructor(
-    bus: MessageBus,
-    readonly name: string,
-    abortSignal?: AbortSignal,
-  ) {
+  constructor(bus: MessageBus, name: string, abortSignal?: AbortSignal) {
+    this.name = name
     this.abortSignal = abortSignal
       ? AbortSignal.any([abortSignal, this.#abortController.signal])
       : this.#abortController.signal

@@ -17,11 +17,12 @@ export function createBridge(port: PortLike) {
 }
 
 export function useWorker(): AsyncDisposable & { worker: Worker } {
+  // The worker's source is loaded through Node's native TypeScript support in
+  // strip-only mode (the default), so it must avoid transform-only syntax such
+  // as parameter properties or enums. Node 26 removed `--experimental-transform-types`
+  // altogether, so relying on that transform is no longer an option.
   const worker = new Worker(new URL('./sum-worker.ts', import.meta.url), {
-    execArgv: supportedExecArgv([
-      '--experimental-transform-types',
-      '--disable-warning=ExperimentalWarning',
-    ]),
+    execArgv: ['--disable-warning=ExperimentalWarning'],
   })
 
   return {
@@ -30,13 +31,4 @@ export function useWorker(): AsyncDisposable & { worker: Worker } {
       await worker.terminate()
     },
   }
-}
-
-// Node 26 unflagged TypeScript transformation and removed
-// `--experimental-transform-types`; passing an unrecognised flag makes the
-// Worker constructor throw. Keep only the flags this runtime still accepts.
-function supportedExecArgv(flags: string[]): string[] {
-  return flags.filter((flag) =>
-    process.allowedNodeEnvironmentFlags.has(flag.split('=')[0]),
-  )
 }
