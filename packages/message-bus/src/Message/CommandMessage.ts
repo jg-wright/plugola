@@ -1,5 +1,7 @@
-import type { Message } from './Message.ts'
-import { defaultEncode, type Codec } from './Codec.ts'
+import { message, Message } from './Message.ts'
+import { type Codec } from './Codec.ts'
+import { type Transportable, TransportableMixin } from './Transportable.ts'
+import { NamedMixin } from './Named.ts'
 
 /**
  * Like {@link message}, but defines a {@link CommandMessage} that streams `R`
@@ -16,19 +18,10 @@ export function command<T extends object, R>(
   name: string,
   codec: Partial<Codec<CommandMessage<R> & T>> = {},
 ): CommandMessageClass<R, T> {
-  class Generated extends CommandMessage<R> {
-    static readonly $name = name
-    static readonly $encode = codec.encode ?? defaultEncode
-    static readonly $decode =
-      codec.decode ?? ((payload: any) => new Generated(payload))
-
-    readonly $name = name
-
-    constructor(payload: T) {
-      super()
-      Object.assign(this, payload)
-    }
-  }
+  class Generated extends NamedMixin(
+    TransportableMixin(CommandMessage<R>, codec),
+    name,
+  ) {}
 
   return Generated as CommandMessageClass<R, T>
 }
@@ -41,18 +34,21 @@ export function command<T extends object, R>(
  *
  * @typeParam T - the type of each value responders stream back.
  */
-export abstract class CommandMessage<T = unknown> implements Message {
-  abstract $name: string
+export abstract class CommandMessage<
+  R = unknown,
+  T extends object = any,
+> extends Message<T> {
   /** Phantom field carrying `T` for inference; never assigned at runtime. */
-  declare $responseType: T
+  declare $responseType: R
 }
 
 /** The constructor type of a {@link CommandMessage}, as returned by {@link command}. */
-export interface CommandMessageClass<R = unknown, T extends object = any> {
+export interface CommandMessageClass<
+  R = unknown,
+  T extends object = any,
+> extends Transportable<CommandMessage<R> & T> {
   new (payload: T): CommandMessage<R> & T
   readonly $name: string
-  $encode(message: CommandMessage<R> & T): unknown
-  $decode(payload: unknown): CommandMessage<R> & T
 }
 
 /**

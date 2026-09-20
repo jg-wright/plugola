@@ -1,4 +1,6 @@
-import { defaultEncode, type Codec } from './Codec.ts'
+import { type Codec } from './Codec.ts'
+import { NamedMixin } from './Named.ts'
+import { type Transportable, TransportableMixin } from './Transportable.ts'
 
 /**
  * Defines a data {@link Message} class from a payload type `T`, in one call. The
@@ -37,18 +39,10 @@ export function message<T extends object>(
   name: string,
   codec: Partial<Codec<T & Message>> = {},
 ): MessageClass<T> {
-  class Generated implements Message {
-    static readonly $name = name
-    static readonly $encode = codec.encode ?? defaultEncode
-    static readonly $decode =
-      codec.decode ?? ((payload: any) => new Generated(payload))
-
-    readonly $name = name
-
-    constructor(payload: T) {
-      Object.assign(this, payload)
-    }
-  }
+  class Generated extends NamedMixin(
+    TransportableMixin(Message, codec),
+    name,
+  ) {}
 
   return Generated as MessageClass<T>
 }
@@ -60,8 +54,12 @@ export function message<T extends object>(
  * to the same subscribers. `$name` is a human-readable label for logging, and the
  * key a message is addressed by on the wire when bridging.
  */
-export interface Message {
-  readonly $name: string
+export abstract class Message<T extends object = any> {
+  static readonly $name: string
+  abstract $name: string
+  constructor(payload: T) {
+    Object.assign(this, payload)
+  }
 }
 
 /**
@@ -70,9 +68,9 @@ export interface Message {
  * not an instance — and what a {@link MessagingBridge} reads `$name`/`$encode`/
  * `$decode` from.
  */
-export interface MessageClass<T extends object = any> {
+export interface MessageClass<T extends object = any> extends Transportable<
+  T & Message
+> {
   new (payload: T): Message & T
   $name: string
-  $encode(message: T & Message): unknown
-  $decode(payload: unknown): T & Message
 }
