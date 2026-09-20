@@ -6,6 +6,7 @@ import { expectTypeOf } from 'vitest'
 import { MessageRegistry } from '../src/Channel/MessageRegistry.ts'
 import type { MessageClass } from '../src/Message/Message.ts'
 import type { CommandMessageClass } from '../src/Message/CommandMessage.ts'
+import type { Transportable } from '../src/Message/Transportable.ts'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 
 const registry = new MessageRegistry()
@@ -20,6 +21,11 @@ const ListFiles = registry.registerCommand<{ dir: string }, string>(
   'list-files',
 )
 expectTypeOf(ListFiles).toExtend<CommandMessageClass<string, { dir: string }>>()
+
+// Registering a message is what makes it Transportable — the `$encode`/`$decode`
+// the bridge reads live on the registered class, not on the bare factory output.
+expectTypeOf(Clicked).toExtend<Transportable<{ x: number; y: number }>>()
+expectTypeOf(ListFiles).toExtend<Transportable<{ dir: string }>>()
 
 export async function assertRegisteredCommandResponse(gateway: MessageGateway) {
   const files = await gateway.invoke(new ListFiles({ dir: '/tmp' })).collect()

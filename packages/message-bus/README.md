@@ -44,17 +44,12 @@ greeting.text // 'hello'
 greeting.$name // 'greeting'
 ```
 
-Each class carries its own name and codec (`$name`, `$encode`, `$decode`), which
-is what lets it cross a [bridge](#transports-bridging-buses). The codec is
-optional: by default a message encodes to its own fields and decodes by
-reconstruction. Pass one only for non-trivial wire shapes:
-
-```typescript
-const Occurred = message<{ at: Date }>('occurred', {
-  encode: (m) => ({ at: m.at.toISOString() }),
-  decode: (p) => new Occurred({ at: new Date(p.at) }),
-})
-```
+Each class carries its own name (`$name`), which is how the bus routes it and how
+it's addressed on the wire. A plain `message()`/`command()` is all you need to
+route within a single bus. To send a message _across_ a
+[bridge](#transports-bridging-buses) it also needs a codec (`$encode`/`$decode`);
+that's added by defining it through a `MessageRegistry`, not by these factories —
+see [Transports](#transports-bridging-buses).
 
 ## Getting started
 
@@ -291,6 +286,18 @@ export const Ping = registry.registerMessage<{ at: number }>('ping')
 export const Sum = registry.registerCommand<{ a: number; b: number }, number>(
   'sum',
 )
+```
+
+Registering is also what gives a class its codec (`$encode`/`$decode`) — the
+serialisation the bridge uses. By default a message encodes to its own fields and
+decodes by reconstruction, so most messages need nothing extra. Pass a codec only
+for non-trivial wire shapes:
+
+```typescript
+export const Occurred = registry.registerMessage<{ at: Date }>('occurred', {
+  encode: (m) => ({ at: m.at.toISOString() }),
+  decode: (p) => new Occurred({ at: new Date(p.at) }),
+})
 ```
 
 Wire a bridge onto each bus over a channel. `LoopbackChannel.pair()` is an

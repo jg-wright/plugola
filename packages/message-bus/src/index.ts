@@ -6,6 +6,7 @@ export * from './Message/Message.ts'
 export * from './Message/CommandMessage.ts'
 export * from './Message/Serializable.ts'
 export * from './Message/Codec.ts'
+export * from './Message/Transportable.ts'
 
 // Handler roles and subscription filtering
 export * from './Roles/Subscriber.ts'

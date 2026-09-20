@@ -4,6 +4,7 @@ import {
   CommandMessage,
   type CommandMessageClass,
 } from '../Message/CommandMessage.ts'
+import type { Transportable } from '../Message/Transportable.ts'
 import type { MessageGateway } from '../Participant/MessageGateway.ts'
 import type { Channel, Frame, SerializedError } from '../Channel/Channel.ts'
 import type { MessageRegistry } from '../Channel/MessageRegistry.ts'
@@ -69,7 +70,8 @@ export class MessagingBridge {
     for (const messageClass of registry.classes)
       if (isCommandClass(messageClass))
         this.#relayCommand(
-          messageClass as unknown as CommandMessageClass<any, any>,
+          messageClass as unknown as CommandMessageClass<any, any> &
+            Transportable<any>,
         )
       else this.#relay(messageClass)
   }
@@ -80,7 +82,7 @@ export class MessagingBridge {
   }
 
   /** Subscribes to `messageClass` locally and sends what it hears over the channel. */
-  #relay(messageClass: MessageClass<any>) {
+  #relay(messageClass: MessageClass<any> & Transportable<any>) {
     this.#gateway.on(messageClass, (message) => {
       if (isFromWire(message)) return
       this.#channel.send({
@@ -96,7 +98,9 @@ export class MessagingBridge {
    * peer: it sends a command frame under a fresh correlation id and stays pending
    * until the peer's `response`/`response-end`/`response-error` frames arrive.
    */
-  #relayCommand(commandClass: CommandMessageClass<any, any>) {
+  #relayCommand(
+    commandClass: CommandMessageClass<any, any> & Transportable<any>,
+  ) {
     this.#gateway.register(commandClass, (command, { send, signal }) => {
       if (isFromWire(command)) return
       const correlationId = this.#correlationId()

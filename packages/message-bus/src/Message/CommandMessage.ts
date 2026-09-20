@@ -1,7 +1,5 @@
 import { message, Message } from './Message.ts'
-import { type Codec } from './Codec.ts'
-import { type Transportable, TransportableMixin } from './Transportable.ts'
-import { NamedMixin } from './Named.ts'
+import { type Named, NamedMixin } from './Named.ts'
 
 /**
  * Like {@link message}, but defines a {@link CommandMessage} that streams `R`
@@ -16,12 +14,8 @@ import { NamedMixin } from './Named.ts'
  */
 export function command<T extends object, R>(
   name: string,
-  codec: Partial<Codec<CommandMessage<R> & T>> = {},
 ): CommandMessageClass<R, T> {
-  class Generated extends NamedMixin(
-    TransportableMixin(CommandMessage<R>, codec),
-    name,
-  ) {}
+  class Generated extends NamedMixin(CommandMessage<R>, name) {}
 
   return Generated as CommandMessageClass<R, T>
 }
@@ -46,9 +40,8 @@ export abstract class CommandMessage<
 export interface CommandMessageClass<
   R = unknown,
   T extends object = any,
-> extends Transportable<CommandMessage<R> & T> {
+> extends Named {
   new (payload: T): CommandMessage<R> & T
-  readonly $name: string
 }
 
 /**

@@ -5,6 +5,10 @@ import {
   type CommandMessageClass,
 } from '../Message/CommandMessage.ts'
 import type { Codec } from '../Message/Codec.ts'
+import {
+  TransportableMixin,
+  type Transportable,
+} from '../Message/Transportable.ts'
 
 /**
  * The set of message classes that cross a {@link MessagingBridge}, and the
@@ -30,7 +34,7 @@ import type { Codec } from '../Message/Codec.ts'
  * ```
  */
 export class MessageRegistry {
-  readonly #byName = new Map<string, MessageClass<any>>()
+  readonly #byName = new Map<string, MessageClass<any> & Transportable<any>>()
 
   /**
    * Defines a data {@link Message} class under `name` and registers it, in one
@@ -41,8 +45,8 @@ export class MessageRegistry {
   registerMessage<T extends object>(
     name: string,
     codec?: Partial<Codec<T & Message>>,
-  ): MessageClass<T> {
-    const messageClass = message<T>(name, codec)
+  ): MessageClass<T> & Transportable<T> {
+    const messageClass = TransportableMixin(message<T>(name), codec)
     this.#add(name, messageClass)
     return messageClass
   }
@@ -56,23 +60,23 @@ export class MessageRegistry {
   registerCommand<T extends object, R>(
     name: string,
     codec?: Partial<Codec<CommandMessage<R> & T>>,
-  ): CommandMessageClass<R, T> {
-    const commandClass = command<T, R>(name, codec)
+  ): CommandMessageClass<R, T> & Transportable<T> {
+    const commandClass = TransportableMixin(command<T, R>(name), codec)
     this.#add(name, commandClass)
     return commandClass
   }
 
   /** The class registered under `name`, or `undefined` — the bridge's decode lookup. */
-  classFor(name: string): MessageClass<any> | undefined {
+  classFor(name: string): (MessageClass<any> & Transportable<any>) | undefined {
     return this.#byName.get(name)
   }
 
   /** Every registered class — the bridge's forward set (what it subscribes to and relays). */
-  get classes(): Iterable<MessageClass<any>> {
+  get classes(): Iterable<MessageClass<any> & Transportable<any>> {
     return this.#byName.values()
   }
 
-  #add(name: string, messageClass: MessageClass<any>) {
+  #add(name: string, messageClass: MessageClass<any> & Transportable<any>) {
     if (this.#byName.has(name))
       throw new Error(`Message "${name}" is already registered`)
     this.#byName.set(name, messageClass)

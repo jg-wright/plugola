@@ -30,6 +30,49 @@ test('command() creates a CommandMessage class and records it', () => {
   expect(registry.classFor('list-files')).toBe(ListFiles)
 })
 
+test('a registered message gets a default codec that round-trips the payload, dropping $-metadata', () => {
+  const registry = new MessageRegistry()
+  const Clicked = registry.registerMessage<{ x: number; y: number }>('clicked')
+
+  const payload = Clicked.$encode(new Clicked({ x: 1, y: 2 }))
+  expect(payload).toEqual({ x: 1, y: 2 })
+
+  const decoded = Clicked.$decode(payload)
+  expect(decoded).toBeInstanceOf(Clicked)
+  expect(decoded).toEqual(new Clicked({ x: 1, y: 2 }))
+})
+
+test('a custom codec overrides encode and decode', () => {
+  const registry = new MessageRegistry()
+  const encode = vi.fn((m: { at: Date }) => ({ at: m.at.toISOString() }))
+  const decode = vi.fn(
+    (p: { at: string }) => new Occurred({ at: new Date(p.at) }),
+  )
+  const Occurred = registry.registerMessage<{ at: Date }>('occurred', {
+    encode,
+    decode,
+  })
+
+  const instance = new Occurred({ at: new Date('2020-01-01T00:00:00.000Z') })
+  const payload = Occurred.$encode(instance)
+  expect(payload).toEqual({ at: '2020-01-01T00:00:00.000Z' })
+  expect(encode).toHaveBeenCalledWith(instance)
+
+  const decoded = Occurred.$decode(payload)
+  expect(decoded.at).toEqual(new Date('2020-01-01T00:00:00.000Z'))
+  expect(decode).toHaveBeenCalledWith(payload)
+})
+
+test('a registered command round-trips through its default codec', () => {
+  const registry = new MessageRegistry()
+  const ListFiles = registry.registerCommand<{ dir: string }, string>(
+    'list-files',
+  )
+
+  const listFiles = new ListFiles({ dir: '/tmp' })
+  expect(ListFiles.$decode(ListFiles.$encode(listFiles))).toEqual(listFiles)
+})
+
 test('classFor() resolves a name to its class for decoding, or undefined', () => {
   const registry = new MessageRegistry()
   const Clicked = registry.registerMessage<{ x: number }>('clicked')
