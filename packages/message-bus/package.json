@@ -11,7 +11,8 @@
     "build": "tsc --build",
     "clean": "tsc --build --clean && rimraf dist",
     "start": "tsc --watch --preserveWatchOutput",
-    "test": "vitest --run"
+    "test": "vitest --run && npm run test:types",
+    "test:types": "tsc -p test/tsconfig.json"
   },
   "author": "",
   "license": "MIT",
@@ -35,6 +36,7 @@
     "@johngw/async-iterator": "^4.0.1",
     "@johngw/stream": "^4.2.0",
     "@plugola/invoke": "^2.0.3",
+    "esbuild-decorators": "^1.0.0",
     "ts-toolbelt": "^9.6.0",
     "tslib": "^2.8.1"
   }

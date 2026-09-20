@@ -1,617 +1,218 @@
-import { AbortError } from '@johngw/async'
-import {
-  accumulate,
-  combineIterators,
-  iteratorRace,
-} from '@johngw/async-iterator'
-import { filterMap, init, last, removeItem, replaceLastItem } from './array.js'
-import Broker from './Broker.js'
-import MessageBusError from './MessageBusError.js'
-import { amend } from './object.js'
-import { CancelEvent } from './symbols.js'
-import {
-  EventInterceptorArgs,
-  EventInterceptors,
-  SubscriberArgs,
-  SubscriberFn,
-  Subscribers,
-  UntilArgs,
-  UntilRtn,
-} from './types/events.js'
-import { EventGeneratorArgs, EventGenerators } from './types/generators.js'
-import {
-  InvokerInterceptorArgs,
-  InvokerInterceptors,
-  Invokers,
-  MatchableInvokerRegistrationArgs,
-} from './types/invokables.js'
-import { Stringable, UnpackResolvableValue } from './types/util.js'
-import {
-  AddAbortSignal,
-  ErrorHandler,
-  MessageBusContext,
-  Unsubscriber,
-} from './types/MessageBus.js'
-import { anySignal, fromSignal } from './AbortController.js'
-import { InvokableNotRegisteredError } from './errors/InvokableNotRegisteredError.js'
-import { InvokerFn } from '@plugola/invoke'
-import { match } from './matcher.js'
-import { StreamReader, StreamReaderArgs, Streams } from './types/streams.js'
-import { WritableReadablePair } from '@johngw/stream/transformers/WritableReadablePair'
-import { mergeUnderlyingSource } from '@johngw/stream'
+import { Participant } from './Participant/Participant.ts'
+import type { Message, MessageFactory } from './Message/Message.ts'
+import type {
+  CommandMessage,
+  CommandMessageFactory,
+} from './Message/CommandMessage.ts'
+import { CANCEL } from './Roles/Interceptor.ts'
+import type {
+  ResponderContext,
+  ResponderErrorHandler,
+} from './Roles/Responder.ts'
+import { getOrInsert } from './lang/Map.ts'
 
-export default class MessageBus<
-  $ extends MessageBusContext = MessageBusContext,
-> {
-  #errorHandlers: ErrorHandler[] = []
-  #eventInterceptors: EventInterceptors<$> = {}
-  #eventGenerators: EventGenerators<$> = {}
-  #invokers: Invokers<$> = {}
-  #invokerInterceptors: InvokerInterceptors<$> = {}
-  #queued: Array<() => unknown> = []
-  #started = false
-  #streams: Streams<$> = {}
-  #subscribers: Subscribers<$> = {}
+/**
+ * The message bus: the shared hub the host owns. It hands out a
+ * {@link MessageGateway} per named participant, routes messages / commands /
+ * interceptions between them, and controls their lifecycle.
+ *
+ * Each participant has its own queue, so participants can be paused and resumed
+ * independently. Participants begin paused: nothing is delivered until the bus
+ * (or the individual participant) is resumed, so wiring up subscriptions before
+ * {@link MessageBus['resume']} is safe.
+ *
+ * @example
+ * ```ts
+ * const bus = new MessageBus()
+ * const a = bus.gateway('a')
+ * const b = bus.gateway('b')
+ * a.on(Ping, () => console.log('pong'))
+ * bus.resume()
+ * b.emit(Ping())
+ * ```
+ */
+export class MessageBus {
+  readonly #participants = new Map<string, Participant>()
 
-  onError(errorHandler: ErrorHandler) {
-    this.#errorHandlers.push(errorHandler)
+  readonly #subscriberRoutes = new Map<MessageFactory, Set<string>>()
+
+  readonly #responderRoutes = new Map<CommandMessageFactory, Set<string>>()
+
+  readonly #interceptorRoutes = new Map<MessageFactory, Set<string>>()
+
+  /**
+   * Records that a participant is interested in a message class so
+   * {@link MessageBus.emit} knows to route to it. Called by the gateway facade
+   * when a subscriber is added; returns a disposer that drops the routing entry.
+   * @internal
+   */
+  readonly on = <M extends MessageFactory>(
+    name: string,
+    messageFactory: M,
+  ): (() => void) => {
+    const routes = getOrInsert(
+      this.#subscriberRoutes,
+      messageFactory,
+      new Set(),
+    )
+    routes.add(name)
     return () => {
-      this.#errorHandlers = removeItem(errorHandler, this.#errorHandlers)
+      this.#subscriberRoutes.get(messageFactory)?.delete(name)
     }
   }
 
-  #reportError(brokerId: string, eventName: Stringable, error: Error) {
-    for (const errorHandler of this.#errorHandlers)
-      errorHandler(new MessageBusError(brokerId, eventName, error))
-  }
-
-  broker(id: string, abort?: AbortSignal | AbortController) {
-    const abortController = !abort
-      ? new AbortController()
-      : abort instanceof AbortController
-        ? abort
-        : fromSignal(abort)
-
-    return new Broker<$>(this, id, abortController)
-  }
-
-  async start() {
-    this.#started = true
-    return Promise.all(this.#queued.map((handle) => handle()))
-  }
-
-  emit<EventName extends keyof $['events']>(
-    broker: Broker<$>,
-    eventName: EventName,
-    args: $['events'][EventName],
-    abortSignal?: AbortSignal,
-  ): void | Promise<void> {
-    const handle = () => {
-      let result: void | Promise<void> = undefined
-
-      try {
-        const interception = this.#callEventInterceptors(eventName, args)
-        result = interception
-          ? interception.then((moddedArgs) => {
-              if (moddedArgs !== CancelEvent) {
-                this.#callSubscribers(eventName, moddedArgs, abortSignal)
-              }
-            })
-          : this.#callSubscribers(eventName, args, abortSignal)
-      } catch (error: any) {
-        this.#reportError(broker.id, eventName, error)
-      }
-
-      return result instanceof Promise
-        ? result.catch((error) =>
-            this.#reportError(broker.id, eventName, error),
-          )
-        : result
-    }
-
-    return this.#started
-      ? handle()
-      : this.#queue(broker, handle).catch((error) =>
-          this.#reportError(broker.id, eventName, error),
-        )
-  }
-
-  interceptEvent<EventName extends keyof $['events']>(
-    broker: Broker<$>,
-    eventName: EventName,
-    args: EventInterceptorArgs<$['events'][EventName]>,
-  ): Unsubscriber {
-    const interceptor = {
-      broker,
-      args: init(args),
-      fn: last(args),
-    } as any
-
-    this.#eventInterceptors = amend(
-      this.#eventInterceptors,
-      eventName,
-      (interceptors = []) => [...interceptors!, interceptor],
-    )
-
+  /**
+   * Records that a participant registered a responder for a command class so
+   * {@link MessageBus['invoke']} routes to it. Returns a disposer.
+   * @internal
+   */
+  readonly register = <T>(
+    name: string,
+    commandFactory: CommandMessageFactory<T>,
+  ): (() => void) => {
+    const routes = getOrInsert(this.#responderRoutes, commandFactory, new Set())
+    routes.add(name)
     return () => {
-      this.#eventInterceptors[eventName] = removeItem(
-        interceptor,
-        this.#eventInterceptors[eventName]!,
-      )
+      this.#responderRoutes.get(commandFactory)?.delete(name)
     }
   }
 
-  interceptInvoker<InvokableName extends keyof $['invokables']>(
-    broker: Broker<$>,
-    invokableName: InvokableName,
-    args: InvokerInterceptorArgs<
-      $['invokables'][InvokableName]['args'],
-      $['invokables'][InvokableName]['return']
-    >,
-  ): Unsubscriber {
-    const interceptor = {
-      broker,
-      args: init(args),
-      fn: last(args),
-    } as any
-
-    this.#invokerInterceptors = amend(
-      this.#invokerInterceptors,
-      invokableName,
-      (interceptors = []) => [...interceptors!, interceptor],
+  /**
+   * Records that a participant wants to intercept a message class so
+   * {@link MessageBus.emit} runs it through that participant before delivery.
+   * Returns a disposer.
+   * @internal
+   */
+  readonly intercept = (
+    name: string,
+    messageFactory: MessageFactory,
+  ): (() => void) => {
+    const routes = getOrInsert(
+      this.#interceptorRoutes,
+      messageFactory,
+      new Set(),
     )
-
+    routes.add(name)
     return () => {
-      this.#invokerInterceptors[invokableName] = removeItem(
-        interceptor,
-        this.#invokerInterceptors[invokableName]!,
-      )
+      this.#interceptorRoutes.get(messageFactory)?.delete(name)
     }
   }
 
-  on<EventName extends keyof $['events']>(
-    broker: Broker<$>,
-    eventName: EventName,
-    args: SubscriberArgs<$['events'][EventName]>,
-  ): Unsubscriber {
-    if (broker.aborted) return () => {}
-
-    const subscriber = {
-      broker,
-      args: init(args),
-      fn: last(args),
-    } as any
-
-    this.#subscribers = amend(
-      this.#subscribers,
-      eventName,
-      (subscribers = []) => [...subscribers!, subscriber],
-    )
-
-    const cancel = () => {
-      this.#subscribers[eventName] = removeItem(
-        subscriber,
-        this.#subscribers[eventName]!,
-      )
-    }
-
-    broker.onAbort(cancel)
-
-    return cancel
-  }
-
-  once<EventName extends keyof $['events']>(
-    broker: Broker<$>,
-    eventName: EventName,
-    args: SubscriberArgs<$['events'][EventName]>,
-  ): Unsubscriber {
-    const fn = last(args) as SubscriberFn<$['events'][EventName]>
-    const onceFn: SubscriberFn<$['events'][EventName]> = (...args) => {
-      cancel()
-      return fn(...args)
-    }
-    const cancel = this.on(
-      broker,
-      eventName,
-      replaceLastItem(args, onceFn) as SubscriberArgs<$['events'][EventName]>,
-    )
-    return cancel
-  }
-
-  async until<
-    EventName extends keyof $['events'],
-    Args extends UntilArgs<$['events'][EventName]>,
-  >(
-    broker: Broker<$>,
-    eventName: EventName,
-    args: Args,
-    abortSignal?: AbortSignal,
-  ): Promise<UntilRtn<$['events'][EventName], Args>> {
-    return new Promise<UntilRtn<$['events'][EventName], Args>>(
-      (resolve, reject) => {
-        const abortSignalComposite = anySignal(abortSignal, broker.abortSignal)
-
-        if (abortSignalComposite.aborted) return reject(new AbortError())
-
-        const subscriberArgs = [
-          ...args,
-          (...args: any) => resolve(args),
-        ] as SubscriberArgs<$['events'][EventName]>
-
-        this.once(broker, eventName, subscriberArgs)
-
-        abortSignalComposite.addEventListener('abort', () => {
-          reject(new AbortError())
-        })
-      },
-    )
-  }
-
-  hasSubscriber(eventName: keyof $['events']) {
-    return !!this.#subscribers[eventName]?.length
-  }
-
-  generator<EventName extends keyof $['generators']>(
-    broker: Broker<$>,
-    eventName: EventName,
-    args: EventGeneratorArgs<
-      $['generators'][EventName]['args'],
-      $['generators'][EventName]['yield']
-    >,
-  ): Unsubscriber {
-    if (broker.aborted) return () => {}
-
-    const iterator = {
-      broker,
-      args: init(args),
-      fn: last(args),
-    } as any
-
-    this.#eventGenerators = amend(
-      this.#eventGenerators,
-      eventName,
-      (iterators = []) => [...iterators!, iterator],
-    )
-
-    const cancel = () => {
-      this.#eventGenerators[eventName] = removeItem(
-        iterator,
-        this.#eventGenerators[eventName]!,
-      )
-    }
-
-    broker.onAbort(cancel)
-
-    return cancel
-  }
-
-  async *iterate<EventName extends keyof $['generators']>(
-    broker: Broker<$>,
-    eventName: EventName,
-    args: $['generators'][EventName]['args'],
-    abortSignal?: AbortSignal,
-  ): AsyncIterable<$['generators'][EventName]['yield']> {
-    if (!this.#started) await this.#queue(broker, () => {})
-
-    yield* combineIterators(
-      ...(this.#eventGenerators[eventName] || [])!
-        .filter((iterator) => this.#argumentIndex(iterator.args, args) !== -1)
-        .map((iterator) =>
-          iterator.fn(
-            ...args.slice(this.#argumentIndex(iterator.args, args)),
-            anySignal(abortSignal, iterator.broker.abortSignal),
-          ),
-        ),
-    )
-  }
-
-  iterateWithin<EventName extends keyof $['generators']>(
-    broker: Broker<$>,
-    within: number,
-    eventName: EventName,
-    args: $['generators'][EventName]['args'],
-    abortSignal?: AbortSignal,
-  ): AsyncIterable<$['generators'][EventName]['yield']> {
-    return iteratorRace(
-      this.iterate(broker, eventName, args, abortSignal),
-      within,
-      anySignal(abortSignal, broker.abortSignal),
-    )
-  }
-
-  async accumulate<EventName extends keyof $['generators']>(
-    broker: Broker<$>,
-    eventName: EventName,
-    args: $['generators'][EventName]['args'],
-    abortSignal?: AbortSignal,
-  ) {
-    return accumulate(this.iterate(broker, eventName, args, abortSignal))
-  }
-
-  async accumulateWithin<EventName extends keyof $['generators']>(
-    broker: Broker<$>,
-    within: number,
-    eventName: EventName,
-    args: $['generators'][EventName]['args'],
-    abortSignal?: AbortSignal,
-  ) {
-    return accumulate(
-      this.iterateWithin(broker, within, eventName, args, abortSignal),
-    )
-  }
-
-  register<InvokableName extends keyof $['invokables']>(
-    broker: Broker<$>,
-    invokableName: InvokableName,
-    allArgs: MatchableInvokerRegistrationArgs<
-      $['invokables'][InvokableName]['args'],
-      $['invokables'][InvokableName]['return']
-    >,
-  ): Unsubscriber {
-    if (broker.aborted) return () => {}
-
-    const args = init(allArgs) as $['invokables'][InvokableName]['args']
-    const fn = last(allArgs) as InvokerFn<
-      $['invokables'][InvokableName]['args'],
-      $['invokables'][InvokableName]['return']
-    >
-    const invokers = this.#invokers[invokableName] || []
-    const registeredInvoker = invokers.find(
-      (invoker) => this.#argumentIndex(invoker.args, args) !== -1,
-    )
-
-    if (registeredInvoker)
-      throw new Error(
-        `An invoker has already been registered that matches ${invokableName.toString()} with args: ${args.join(
-          ', ',
-        )}.`,
-      )
-
-    const subscriber = {
-      broker,
-      args,
-      fn,
-    }
-
-    this.#invokers[invokableName] = [
-      ...invokers,
-      subscriber,
-    ] as unknown as Invokers<$>[InvokableName]
-
-    const cancel = () => {
-      this.#invokers[invokableName] = removeItem(
-        subscriber,
-        this.#invokers[invokableName] as any,
-      ) as unknown as Invokers<$>[InvokableName]
-    }
-
-    broker.onAbort(() => setTimeout(cancel, 0))
-
-    return cancel
-  }
-
-  async invoke<InvokableName extends keyof $['invokables']>(
-    broker: Broker<$>,
-    invokableName: InvokableName,
-    args: $['invokables'][InvokableName]['args'],
-    abortSignal?: AbortSignal,
-  ): Promise<$['invokables'][InvokableName]['return']> {
-    const handle = async () =>
-      new Promise((resolve, reject) => {
-        const abortSignalComposite = anySignal(abortSignal, broker.abortSignal)
-        if (abortSignalComposite.aborted) return reject(new AbortError())
-        abortSignalComposite.addEventListener('abort', () =>
-          reject(new AbortError()),
-        )
-
-        resolve(this.#invokeChain(invokableName, args, abortSignalComposite))
-      })
-
-    return this.#started ? handle() : this.#queue(broker, handle)
-  }
-
-  reader<StreamName extends keyof $['streams']>(
-    broker: Broker<$>,
-    streamName: StreamName,
-    allArgs: StreamReaderArgs<
-      $['streams'][StreamName]['args'],
-      $['streams'][StreamName]['item']
-    >,
-  ): Unsubscriber {
-    type $StreamReader = StreamReader<$, StreamName>
-
-    const streamer: $StreamReader = {
-      broker,
-      args: init(allArgs) as $StreamReader['args'],
-      fn: last(allArgs) as $StreamReader['fn'],
-    }
-
-    this.#streams[streamName] ??= []
-
-    this.#streams[streamName].push(streamer)
-
-    const cancel = () => {
-      this.#streams[streamName] = removeItem(
-        streamer,
-        this.#streams[streamName]!,
-      )
-    }
-
-    broker.onAbort(cancel)
-
-    return cancel
-  }
-
-  stream<StreamName extends keyof $['streams']>(
-    broker: Broker<$>,
-    streamName: StreamName,
-    args: $['streams'][StreamName]['args'],
-    abortSignal?: AbortSignal,
-  ): ReadableStream<$['streams'][StreamName]['item']> {
-    type Item = $['streams'][StreamName]['item']
-
-    const streamers = this.#streams[streamName] ?? []
-
-    const abortSignalComposite = anySignal(abortSignal, broker.abortSignal)
-
-    const streams = () =>
-      filterMap(
-        streamers,
-        (streamer) => this.#argumentIndex(streamer.args, args),
-        (_streamer, argumentIndex) => argumentIndex !== -1,
-        (streamer, argumentIndex) =>
-          new ReadableStream(
-            streamer.fn(
-              ...([
-                ...streamer.args.slice(0, argumentIndex),
-                ...args.slice(argumentIndex),
-                abortSignalComposite,
-              ] as AddAbortSignal<$['streams'][StreamName]['args']>),
-            ),
-          ),
-      )
-
-    return new ReadableStream({
-      start: async (controller) => {
-        if (!this.#started) await this.#queue(broker, () => {})
-        const abort = () => controller.error(abortSignalComposite.reason)
-        if (abortSignalComposite.aborted) return abort()
-        abortSignalComposite.addEventListener('abort', abort)
-      },
-    }).pipeThrough(
-      new WritableReadablePair<never, Item>({}, mergeUnderlyingSource(streams)),
-    )
-  }
-
-  #callEventInterceptors<EventName extends keyof $['events']>(
-    eventName: EventName,
-    args: $['events'][EventName],
-  ): void | Promise<$['events'][EventName] | typeof CancelEvent> {
-    const eventInterceptors = (this.#eventInterceptors[eventName] || [])!
-
-    if (!eventInterceptors.length) return
-
-    return (async () => {
-      let moddedArgs: $['events'][EventName] | typeof CancelEvent = args
-
-      for (const interceptor of eventInterceptors) {
-        const index = this.#argumentIndex(interceptor.args, moddedArgs)
-
-        if (index === -1) continue
-
-        const newArgs = await interceptor.fn(...moddedArgs.slice(index))
-
-        if (newArgs === CancelEvent) return CancelEvent
-        else if (newArgs)
-          moddedArgs = [
-            ...moddedArgs.slice(0, index),
-            ...newArgs,
-          ] as $['events'][EventName]
-      }
-
-      return moddedArgs
-    })()
-  }
-
-  async #invokeChain<InvokableName extends keyof $['invokables']>(
-    invokableName: InvokableName,
-    args: $['invokables'][InvokableName]['args'],
-    signal: AbortSignal,
-  ): Promise<$['invokables'][InvokableName]['return']> {
-    const invokerInterceptors = this.#invokerInterceptors[invokableName] || []
-
-    const invokeChain = async (
-      index: number,
-      args: $['invokables'][InvokableName]['args'],
-    ): Promise<$['invokables'][InvokableName]['return']> => {
-      const interceptor = invokerInterceptors[index]
-      if (!interceptor) return this.#invoke(invokableName, args, signal)
-      const argIndex = this.#argumentIndex(interceptor.args, args)
-      return argIndex === -1
-        ? invokeChain(index + 1, args)
-        : interceptor.fn(
-            (...nextArgs) => invokeChain(index + 1, nextArgs),
-            ...args.slice(argIndex),
-          )
-    }
-
-    return invokeChain(0, args)
-  }
-
-  #callSubscribers<EventName extends keyof $['events']>(
-    eventName: EventName,
-    args: $['events'][EventName],
-    abortSignal?: AbortSignal,
-  ): void | Promise<void> {
-    const subscribers = (this.#subscribers[eventName] || [])!
-    const promises: Promise<void>[] = []
-
-    for (const subscriber of subscribers) {
-      const index = this.#argumentIndex(subscriber.args, args)
-
-      const subscriberAbortSignal = anySignal(
-        abortSignal,
-        subscriber.broker.abortSignal,
-      )
-
-      if (index >= 0) {
-        const promise = subscriber.fn(
-          ...args.slice(index),
-          subscriberAbortSignal,
-        )
-        if (promise) {
-          promises.push(promise)
-        }
-      }
-    }
-
-    if (promises.length) {
-      return Promise.all(promises).then(() => {})
-    }
-  }
-
-  async #invoke<InvokableName extends keyof $['invokables']>(
-    invokableName: InvokableName,
-    args: $['invokables'][InvokableName]['args'],
-    abortSignal: AbortSignal,
-  ): Promise<$['invokables'][InvokableName]['return']> {
-    const invokers = this.#invokers[invokableName]
-    const invoker =
-      invokers &&
-      invokers.find((invoker) => this.#argumentIndex(invoker.args, args) !== -1)
-
-    if (!invoker) {
-      throw new InvokableNotRegisteredError(this, invokableName.toString())
-    }
-
-    return invoker.fn(
-      ...(args.slice(
-        this.#argumentIndex(invoker.args, args),
-      ) as $['invokables'][InvokableName]['args']),
-      abortSignal,
-    )
-  }
-
-  #argumentIndex(args1: ArrayLike<unknown>, args2: ArrayLike<unknown>) {
-    if (!args1.length) return 0
-    else if (args1.length > args2.length) return -1
-
-    let i = 0
-    for (; i < args1.length; i++) if (!match(args1[i], args2[i])) return -1
-    return i
-  }
-
-  async #queue<T>(broker: Broker<$>, handler: () => T) {
-    return new Promise<UnpackResolvableValue<T>>((resolve, reject) => {
-      if (broker.aborted) return reject(new AbortError())
-
-      const fn = () => resolve(handler() as UnpackResolvableValue<T>)
-      this.#queued.push(fn)
-
-      broker.onAbort(() => {
-        this.#queued = removeItem(fn, this.#queued)
-        reject(new AbortError())
-      })
+  /**
+   * Creates a participant under `name` and returns its {@link MessageGateway}
+   * facade — the object a participant uses to subscribe, emit, and invoke. Names
+   * are unique for the bus's lifetime; a name frees up again once its participant
+   * is aborted.
+   *
+   * @throws if a participant with `name` is already registered.
+   */
+  gateway(name: string, abortSignal?: AbortSignal) {
+    if (this.#participants.has(name))
+      throw new Error(`Gateway "${name}" has already been registered`)
+
+    const participant = new Participant(this, name, abortSignal)
+    this.#participants.set(name, participant)
+
+    participant.onAbort(() => {
+      this.#participants.delete(name)
+      for (const routes of [
+        this.#subscriberRoutes,
+        this.#responderRoutes,
+        this.#interceptorRoutes,
+      ])
+        for (const names of routes.values()) names.delete(name)
     })
+
+    return participant.gateway
+  }
+
+  /**
+   * Runs the message through every registered interceptor (in chain order) and
+   * then delivers the final message to every subscribed participant. Resolves to
+   * the message as it stood after interception, or {@link CANCEL} if an
+   * interceptor cancelled it. Prefer `gateway.emit`, which queues through the
+   * sender's queue; this is the bus-level primitive it calls.
+   * @internal
+   */
+  async emit<M extends Message>(message: M): Promise<M | typeof CANCEL> {
+    const interceptorNames = this.#interceptorRoutes.get(message.$factory) ?? []
+
+    for (const name of interceptorNames) {
+      const result = await this.#participants
+        .get(name)
+        ?.dispatcher.runInterceptors(message)
+      if (result === CANCEL) return CANCEL
+      else if (result) message = result as M
+    }
+
+    const subscriberNames = this.#subscriberRoutes.get(message.$factory)
+    if (!subscriberNames?.size) return message
+
+    for (const name of subscriberNames)
+      this.#participants.get(name)?.dispatcher.dispatch(message)
+
+    return message
+  }
+
+  /**
+   * Fans a command out to every participant that registered for it and resolves
+   * once they have all settled. The participant set is snapshotted so a
+   * participant (un)registering mid-flight can't move the target; a participant
+   * that has since been removed simply contributes a resolved `undefined`. Prefer
+   * `gateway.invoke`, which wraps this in a stream; this is the bus-level
+   * primitive it calls.
+   * @internal
+   */
+  async invoke<T>(
+    command: CommandMessage<T>,
+    context: ResponderContext<CommandMessageFactory<T>>,
+    reportError: ResponderErrorHandler,
+  ): Promise<void> {
+    const responderNames = this.#responderRoutes.get(
+      command.$factory as CommandMessageFactory<T>,
+    )
+
+    if (!responderNames?.size) return
+
+    await Promise.all(
+      Array.from(responderNames, (name) =>
+        this.#participants
+          .get(name)
+          ?.dispatcher.dispatchCommand(command, context, reportError),
+      ),
+    )
+  }
+
+  /**
+   * Permanently tears down the named participant: fires its abort signal, clears
+   * its handlers, and removes it from all routing so its name can be reused.
+   * Unlike {@link MessageBus.pause}, this cannot be undone.
+   */
+  abort(name: string, reason?: Error) {
+    this.#participants.get(name)?.abort(reason)
+  }
+
+  /**
+   * Resumes participants so queued and future messages are delivered.
+   * Participants begin paused, so this is also how you first bring the bus to
+   * life. With a `name`, resumes just that participant; with no argument, resumes
+   * every participant on the bus.
+   */
+  resume(name?: string) {
+    if (name === undefined)
+      for (const participant of this.#participants.values())
+        participant.resume()
+    else this.#participants.get(name)?.resume()
+  }
+
+  /**
+   * Pauses participants: their queues stop draining and inbound messages buffer
+   * until resumed. With a `name`, pauses just that participant; with no argument,
+   * pauses every participant on the bus. Reversible via {@link MessageBus.resume}.
+   */
+  pause(name?: string) {
+    if (name === undefined)
+      for (const participant of this.#participants.values()) participant.pause()
+    else this.#participants.get(name)?.pause()
   }
 }

@@ -1,11 +1,12 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "composite": true,
+    "rewriteRelativeImportExtensions": true,
     "rootDir": "./src",
     "lib": ["ESNext"],
     "outDir": "dist"
   },
-  "include": ["src"],
-  "references": [{ "path": "../invoke" }]
+  "include": ["src"]
 }
