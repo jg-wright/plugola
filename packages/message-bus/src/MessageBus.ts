@@ -19,7 +19,7 @@ import { getOrInsert } from './lang/Map.ts'
  * Each participant has its own queue, so participants can be paused and resumed
  * independently. Participants begin paused: nothing is delivered until the bus
  * (or the individual participant) is resumed, so wiring up subscriptions before
- * {@link MessageBus.resume} is safe.
+ * {@link MessageBus['resume']} is safe.
  *
  * @example
  * ```ts
@@ -59,7 +59,7 @@ export class MessageBus {
 
   /**
    * Records that a participant registered a responder for a command class so
-   * {@link MessageBus.invoke} routes to it. Returns a disposer.
+   * {@link MessageBus['invoke']} routes to it. Returns a disposer.
    * @internal
    */
   readonly register = <T>(

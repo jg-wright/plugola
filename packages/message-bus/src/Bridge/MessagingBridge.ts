@@ -15,8 +15,8 @@ import { onAbort } from '../lang/AbortSignal.ts'
  * For every class in the {@link MessageRegistry}:
  *
  * - a **message** is relayed both ways — subscribed locally and sent as a frame
- *   ({@link MessageGateway.on} → {@link Channel.send}), and decoded and re-emitted
- *   on the way in ({@link Channel.receive} → {@link MessageGateway.emit});
+ *   ({@link MessageGateway.prototype.on} → {@link Channel.send}), and decoded and re-emitted
+ *   on the way in ({@link Channel.receive} → {@link MessageGateway.prototype.emit});
  * - a **command** is relayed as a request/reply: a local `invoke` reaches the
  *   peer's responders (the bridge registers a responder that forwards the command
  *   under a fresh `correlationId` and streams the peer's responses back), and an

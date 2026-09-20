@@ -21,11 +21,11 @@ import { onAbort } from '../lang/AbortSignal.ts'
 /**
  * The outbound half of a {@link Participant} — what `bus.gateway(name)` returns.
  * Everything a participant does flows through here: subscribing to messages
- * ({@link MessageGateway.on}, {@link MessageGateway.once},
- * {@link MessageGateway.until}), publishing them ({@link MessageGateway.emit}),
- * transforming them in flight ({@link MessageGateway.intercept}), and the
- * request/stream pattern of {@link MessageGateway['register']} +
- * {@link MessageGateway.invoke}. It writes the participant's
+ * ({@link MessageGateway.prototype.on}, {@link MessageGateway.prototype.once},
+ * {@link MessageGateway.prototype.until}), publishing them ({@link MessageGateway.prototype.emit}),
+ * transforming them in flight ({@link MessageGateway.prototype.intercept}), and the
+ * request/stream pattern of {@link MessageGateway.prototype.register} +
+ * {@link MessageGateway.prototype.invoke}. It writes the participant's
  * {@link PerformerRegistry} (which the {@link MessageDispatcher} reads) and
  * publishes onto the {@link MessageBus}.
  *
@@ -37,12 +37,6 @@ export class MessageGateway {
   readonly #participant: Participant
 
   readonly #bus: MessageBus
-
-  readonly #invoke: <E extends CommandMessageFactory>(
-    command: MessageOf<E>,
-    params: ResponderContext<E>,
-    reportError: ResponderErrorHandler,
-  ) => Promise<void>
 
   /**
    * Publishes a message to the whole bus. Runs any interceptors first, then
@@ -61,22 +55,6 @@ export class MessageGateway {
   constructor(participant: Participant, bus: MessageBus) {
     this.#participant = participant
     this.#bus = bus
-
-    this.#invoke = participant.queue.queueMethod(
-      async (
-        command: CommandMessage,
-        context: {
-          send(value: any): void
-          signal: AbortSignal
-        },
-        reportError: ResponderErrorHandler,
-      ) => {
-        const result = await bus.emit(command)
-        if (result === CANCEL) return
-        await bus.invoke(result, context, reportError)
-      },
-    )
-
     this.emit = participant.queue.queueMethod(<M extends Message>(message: M) =>
       bus.emit(message),
     )
@@ -294,6 +272,19 @@ export class MessageGateway {
       filterOrInterceptor,
       interceptor,
     )
+  }
+
+  #invoke = async (
+    command: CommandMessage,
+    context: {
+      send(value: any): void
+      signal: AbortSignal
+    },
+    reportError: ResponderErrorHandler,
+  ) => {
+    const result = await this.emit(command)
+    if (result === CANCEL) return
+    await this.#bus.invoke(result, context, reportError)
   }
 
   /**

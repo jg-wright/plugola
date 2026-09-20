@@ -7,7 +7,7 @@ import { MessageGateway } from './MessageGateway.ts'
 
 /**
  * One named endpoint on the {@link MessageBus}. A participant is the shared
- * kernel of a bus member — its identity ({@link Participant.name}), its
+ * kernel of a bus member — its identity ({@link Participant.prototype.name}), its
  * {@link PerformerRegistry wiring}, its {@link MethodQueue queue} (the single
  * serialization point that lets it be paused and resumed), and its abort
  * lifecycle — with two faces onto it:

@@ -14,9 +14,9 @@ import type { MessageGateway } from './MessageGateway.ts'
 /**
  * The inbound half of a {@link Participant}: the bus delivers messages/commands
  * into this dispatcher, which drives the participant's local performers —
- * {@link MessageDispatcher['dispatch']} runs its subscribers,
- * {@link MessageDispatcher['dispatchCommand']} runs its responders, and
- * {@link MessageDispatcher['runInterceptors']} runs its interceptor chain. It reads
+ * {@link MessageDispatcher.prototype.dispatch} runs its subscribers,
+ * {@link MessageDispatcher.prototype.dispatchCommand} runs its responders, and
+ * {@link MessageDispatcher.prototype.runInterceptors} runs its interceptor chain. It reads
  * the participant's {@link PerformerRegistry} (which the {@link MessageGateway}
  * facade writes) and is gated on the participant's queue, so a paused
  * participant delivers nothing. Only the MessageBus and internal machinery ever
