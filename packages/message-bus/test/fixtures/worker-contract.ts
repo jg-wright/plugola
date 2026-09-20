@@ -18,10 +18,10 @@ export function createBridge(port: PortLike) {
 
 export function useWorker(): AsyncDisposable & { worker: Worker } {
   const worker = new Worker(new URL('./sum-worker.ts', import.meta.url), {
-    execArgv: [
+    execArgv: supportedExecArgv([
       '--experimental-transform-types',
       '--disable-warning=ExperimentalWarning',
-    ],
+    ]),
   })
 
   return {
@@ -30,4 +30,13 @@ export function useWorker(): AsyncDisposable & { worker: Worker } {
       await worker.terminate()
     },
   }
+}
+
+// Node 26 unflagged TypeScript transformation and removed
+// `--experimental-transform-types`; passing an unrecognised flag makes the
+// Worker constructor throw. Keep only the flags this runtime still accepts.
+function supportedExecArgv(flags: string[]): string[] {
+  return flags.filter((flag) =>
+    process.allowedNodeEnvironmentFlags.has(flag.split('=')[0]),
+  )
 }
