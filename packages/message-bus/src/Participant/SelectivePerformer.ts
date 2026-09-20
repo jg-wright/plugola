@@ -1,5 +1,6 @@
-import type { Message, MessageFactory } from '../Message/Message.ts'
+import type { MessageFactory, MessageOf } from '../Message/Message.ts'
 import type { Filter, FilterEntries, FilterPredicate } from '../Filter.ts'
+import type { Performer } from '../Roles/Performer.ts'
 
 /**
  * A performer (a {@link Subscriber}, {@link Responder}, or {@link Interceptor})
@@ -7,28 +8,31 @@ import type { Filter, FilterEntries, FilterPredicate } from '../Filter.ts'
  * *Selective Consumer* in EIP terms. {@link SelectivePerformer.perform} runs the
  * callback only when the message matches the filter.
  */
-export class SelectivePerformer<M extends Message> {
-  readonly #filterEntries: FilterEntries<MessageFactory>
-  readonly #performer: (message: M, ...args: unknown[]) => any
+export class SelectivePerformer<
+  M extends MessageFactory,
+  P extends Performer<M> = Performer<M>,
+> {
+  readonly #filterEntries: FilterEntries<M>
+  readonly #performer: P
 
-  constructor(
-    filter: Filter<MessageFactory>,
-    performer: (message: M, ...args: unknown[]) => any,
-  ) {
-    this.#filterEntries = Object.entries(
-      filter,
-    ) as FilterEntries<MessageFactory>
+  constructor(filter: Filter<M>, performer: P) {
+    this.#filterEntries = Object.entries(filter) as FilterEntries<M>
     this.#performer = performer
   }
 
-  perform(message: M, ...args: unknown[]): any | void {
-    if (this.#filter(message)) return this.#performer(message, ...args)
+  perform(...args: Parameters<P>): void | ReturnType<P> {
+    // `#performer` is a type variable constrained to a union of roles with
+    // differing arity and return types, so TS can't verify the spread call
+    // generically. Each instance binds `P` to a single role, so casting to a
+    // rest-parameter signature is sound.
+    const call = this.#performer as (...args: Parameters<P>) => ReturnType<P>
+    if (this.#filter(args[0])) return call(...args)
   }
 
-  #filter(message: M) {
+  #filter(message: MessageOf<M>) {
     return this.#filterEntries.every(([key, value]) =>
       typeof value === 'function'
-        ? (value as FilterPredicate<MessageFactory>)(message)
+        ? (value as FilterPredicate<M>)(message)
         : value === message[key as keyof M],
     )
   }

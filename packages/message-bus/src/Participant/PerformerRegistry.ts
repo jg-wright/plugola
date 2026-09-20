@@ -1,8 +1,5 @@
-import type { Message, MessageFactory } from '../Message/Message.ts'
-import type {
-  CommandMessage,
-  CommandMessageFactory,
-} from '../Message/CommandMessage.ts'
+import type { MessageFactory } from '../Message/Message.ts'
+import type { CommandMessageFactory } from '../Message/CommandMessage.ts'
 import type { Subscriber } from '../Roles/Subscriber.ts'
 import type { Interceptor } from '../Roles/Interceptor.ts'
 import type { Responder } from '../Roles/Responder.ts'
@@ -63,27 +60,27 @@ export class PerformerRegistry {
 
   readonly #subscribers = new Map<
     MessageFactory,
-    Set<SelectivePerformer<Message>>
+    Set<SelectivePerformer<MessageFactory>>
   >()
 
   readonly #responders = new Map<
     CommandMessageFactory,
-    Set<SelectivePerformer<CommandMessage>>
+    Set<SelectivePerformer<CommandMessageFactory>>
   >()
 
   readonly #interceptors = new Map<
     MessageFactory,
-    Set<SelectivePerformer<Message>>
+    Set<SelectivePerformer<MessageFactory>>
   >()
 
-  #add(
-    registry: Map<any, Set<SelectivePerformer<any>>>,
-    messageFactory: MessageFactory,
-    filter: Filter<MessageFactory>,
-    callback: (...args: any[]) => any,
+  #add<M extends MessageFactory>(
+    registry: Map<M, Set<SelectivePerformer<M>>>,
+    messageFactory: M,
+    filter: Filter<M>,
+    perform: Performer<M>,
   ): () => boolean {
     const performers = getOrInsert(registry, messageFactory, new Set())
-    const performer = new SelectivePerformer(filter, callback)
+    const performer = new SelectivePerformer(filter, perform)
     performers.add(performer)
 
     return () => {

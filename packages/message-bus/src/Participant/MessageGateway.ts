@@ -360,11 +360,11 @@ export class MessageGateway {
     add: R,
     subscribe: (name: string, messageFactory: M) => () => void,
     messageFactory: M,
-    filterOrCallback: Filter<M> | P,
+    filterOrPerformer: Filter<M> | P,
     performer?: P,
   ) {
-    const filter = (performer ? filterOrCallback : {}) as Filter<M>
-    performer ??= filterOrCallback as P
+    const filter = (performer ? filterOrPerformer : {}) as Filter<M>
+    performer ??= filterOrPerformer as P
 
     const removePerformer = add(messageFactory, filter, performer)
     const unregister = subscribe(this.name, messageFactory)
