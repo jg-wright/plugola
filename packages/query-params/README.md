@@ -71,22 +71,16 @@ parseQueryParams('foo{}={"bar": [1, 2]}')
 ```javascript
 const config = { foo: '' }
 
+// Or achieving a similar thing with `set` prop.
 parseQueryParams('cfg.foo=bar', {
   // merge in to the `config` property
   into: config,
-  // ... but only use query params that start with `cfg.`
-  filter: (key) => key.startsWith('cfg.'),
-  // ... and remove `cfg.` from the property name
-  amendKey: (key) => key.substr(4),
-})
-// { foo: 'bar' }
-
-// Or achieving a similar thing with `set` prop.
-parseQueryParams('cfg.foo=bar', {
-  into: config,
   set: (queryParams, key, value) =>
+    // ... but only use query params that start with `cfg.`
     key.startsWith('cfg.')
-      ? { ...queryParams, [key.substr(4)]: value }
+      ? // ... and remove `cfg.` from the property name
+        { ...queryParams, [key.substr(4)]: value }
       : queryParams,
 })
+// { foo: 'bar' }
 ```
