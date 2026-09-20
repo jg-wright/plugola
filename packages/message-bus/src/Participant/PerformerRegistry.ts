@@ -9,6 +9,7 @@ import type { Responder } from '../Roles/Responder.ts'
 import type { Filter } from '../Filter.ts'
 import { getOrInsert } from '../lang/Map.ts'
 import { SelectivePerformer } from './SelectivePerformer.ts'
+import type { Performer } from '../Roles/Performer.ts'
 
 /**
  * A participant's local wiring: the set of {@link Subscriber}s,
@@ -24,33 +25,33 @@ import { SelectivePerformer } from './SelectivePerformer.ts'
  */
 export class PerformerRegistry {
   readonly addSubscriber = <M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     filter: Filter<M>,
     subscriber: Subscriber<M>,
-  ) => this.#add(this.#subscribers, messageClass, filter, subscriber)
+  ) => this.#add(this.#subscribers, messageFactory, filter, subscriber)
 
   readonly addResponder = <E extends CommandMessageFactory>(
-    commandClass: E,
+    commandFactory: E,
     filter: Filter<E>,
     responder: Responder<E>,
-  ) => this.#add(this.#responders, commandClass, filter, responder)
+  ) => this.#add(this.#responders, commandFactory, filter, responder)
 
   readonly addInterceptor = <M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     filter: Filter<M>,
     interceptor: Interceptor<M>,
-  ) => this.#add(this.#interceptors, messageClass, filter, interceptor)
+  ) => this.#add(this.#interceptors, messageFactory, filter, interceptor)
 
-  subscribersFor(messageClass: MessageFactory) {
-    return this.#subscribers.get(messageClass)
+  subscribersFor(messageFactory: MessageFactory) {
+    return this.#subscribers.get(messageFactory)
   }
 
-  respondersFor(commandClass: CommandMessageFactory) {
-    return this.#responders.get(commandClass)
+  respondersFor(commandFactory: CommandMessageFactory) {
+    return this.#responders.get(commandFactory)
   }
 
-  interceptorsFor(messageClass: MessageFactory) {
-    return this.#interceptors.get(messageClass)
+  interceptorsFor(messageFactory: MessageFactory) {
+    return this.#interceptors.get(messageFactory)
   }
 
   /** Drops every registered performer; used when the participant is aborted. */
@@ -77,11 +78,11 @@ export class PerformerRegistry {
 
   #add(
     registry: Map<any, Set<SelectivePerformer<any>>>,
-    messageClass: unknown,
+    messageFactory: MessageFactory,
     filter: Filter<MessageFactory>,
     callback: (...args: any[]) => any,
   ): () => boolean {
-    const performers = getOrInsert(registry, messageClass, new Set())
+    const performers = getOrInsert(registry, messageFactory, new Set())
     const performer = new SelectivePerformer(filter, callback)
     performers.add(performer)
 
@@ -90,4 +91,10 @@ export class PerformerRegistry {
       return performers.size === 0
     }
   }
+}
+
+export interface PerformerRegistrator<
+  M extends MessageFactory = MessageFactory,
+> {
+  (messageFactory: M, filter: Filter<M>, responder: Performer<M>): () => boolean
 }

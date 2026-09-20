@@ -17,6 +17,8 @@ import type { Filter } from '../Filter.ts'
 import type { MessageBus } from '../MessageBus.ts'
 import type { Participant } from './Participant.ts'
 import { onAbort } from '../lang/AbortSignal.ts'
+import type { Performer } from '../Roles/Performer.ts'
+import type { PerformerRegistrator } from './PerformerRegistry.ts'
 
 /**
  * The outbound half of a {@link Participant} — what `bus.gateway(name)` returns.
@@ -103,7 +105,7 @@ export class MessageGateway {
   }
 
   /**
-   * Subscribes `subscriber` to every message of `messageClass`.
+   * Subscribes `subscriber` to every message of `messageFactory`.
    *
    * @returns a disposer that removes the subscription.
    * @example
@@ -113,7 +115,7 @@ export class MessageGateway {
    * ```
    */
   on<M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     subscriber: Subscriber<M>,
   ): () => void
 
@@ -122,20 +124,20 @@ export class MessageGateway {
    * {@link Filter}).
    */
   on<M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     filter: Filter<M>,
     subscriber: Subscriber<M>,
   ): () => void
 
   on<M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     filterOrSubscriber: Filter<M> | Subscriber<M>,
     subscriber?: Subscriber<M>,
   ): () => void {
     return this.#addPerformer(
-      this.#participant.registry.addSubscriber,
+      this.#participant.registry.addSubscriber as PerformerRegistrator,
       this.#bus.on,
-      messageClass,
+      messageFactory,
       filterOrSubscriber,
       subscriber,
     )
@@ -148,25 +150,25 @@ export class MessageGateway {
    * @returns a disposer, in case you want to cancel before it ever fires.
    */
   once<M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     subscriber: Subscriber<M>,
   ): () => void
 
   /** Fires once for the first message matching `filter`, then unsubscribes. */
   once<M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     filter: Filter<M>,
     subscriber: Subscriber<M>,
   ): () => void
 
   once<M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     filterOrSubscriber: Filter<M> | Subscriber<M>,
     subscriber?: Subscriber<M>,
   ): () => void {
     const filter = (subscriber ? filterOrSubscriber : {}) as Filter<M>
     subscriber ??= filterOrSubscriber as Subscriber<M>
-    const off = this.on(messageClass, filter, (message) => {
+    const off = this.on(messageFactory, filter, (message) => {
       subscriber(message)
       off()
     })
@@ -174,7 +176,7 @@ export class MessageGateway {
   }
 
   /**
-   * Resolves with the next message of `messageClass` (optionally matching
+   * Resolves with the next message of `messageFactory` (optionally matching
    * `filter`). Rejects with the abort reason if this participant is aborted while
    * waiting.
    *
@@ -184,13 +186,13 @@ export class MessageGateway {
    * ```
    */
   until<M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     filter: Filter<M> = {},
   ): Promise<MessageOf<M>> {
     return new Promise((resolve, reject) => {
       const { aborted, off } = onAbort(reject, this.abortSignal)
       if (!aborted)
-        this.once(messageClass, filter, (message) => {
+        this.once(messageFactory, filter, (message) => {
           off()
           resolve(message)
         })
@@ -213,33 +215,33 @@ export class MessageGateway {
    * ```
    */
   register<E extends CommandMessageFactory>(
-    commandClass: E,
+    commandFactory: E,
     responder: Responder<E>,
   ): () => void
 
   /** Registers a responder only for commands matching `filter`. */
   register<E extends CommandMessageFactory>(
-    commandClass: E,
+    commandFactory: E,
     filter: Filter<E>,
     responder: Responder<E>,
   ): () => void
 
   register<E extends CommandMessageFactory>(
-    commandClass: E,
+    commandFactory: E,
     filterOrResponder: Filter<E> | Responder<E>,
     responder?: Responder<E>,
   ): () => void {
     return this.#addPerformer(
-      this.#participant.registry.addResponder,
+      this.#participant.registry.addResponder as PerformerRegistrator<E>,
       this.#bus.register,
-      commandClass,
+      commandFactory,
       filterOrResponder,
       responder,
     )
   }
 
   /**
-   * Intercepts messages of `messageClass` before their subscribers run. The
+   * Intercepts messages of `messageFactory` before their subscribers run. The
    * interceptor may return a replacement message, {@link CANCEL} to drop it, or
    * nothing to leave it unchanged (see {@link InterceptorResult}). Interceptors
    * across participants form a chain, each seeing the previous one's result.
@@ -249,26 +251,26 @@ export class MessageGateway {
    * @returns a disposer that removes the interceptor.
    */
   intercept<M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     interceptor: Interceptor<M>,
   ): () => void
 
   /** Intercepts only messages matching `filter`. */
   intercept<M extends MessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     filter: Filter<M>,
     interceptor: Interceptor<M>,
   ): () => void
 
   intercept<M extends MessageFactory | CommandMessageFactory>(
-    messageClass: M,
+    messageFactory: M,
     filterOrInterceptor: Filter<M> | Interceptor<M>,
     interceptor?: Interceptor<M>,
   ): () => void {
     return this.#addPerformer(
-      this.#participant.registry.addInterceptor,
+      this.#participant.registry.addInterceptor as PerformerRegistrator,
       this.#bus.intercept,
-      messageClass,
+      messageFactory,
       filterOrInterceptor,
       interceptor,
     )
@@ -351,23 +353,21 @@ export class MessageGateway {
   }
 
   #addPerformer<
-    Add extends (
-      messageClass: any,
-      filter: Filter<MessageFactory>,
-      callback: any,
-    ) => () => boolean,
+    M extends MessageFactory,
+    P extends Performer<M>,
+    R extends PerformerRegistrator<M>,
   >(
-    add: Add,
-    subscribe: (name: string, messageClass: any) => () => void,
-    messageClass: unknown,
-    filterOrCallback: unknown,
-    callback?: unknown,
+    add: R,
+    subscribe: (name: string, messageFactory: M) => () => void,
+    messageFactory: M,
+    filterOrCallback: Filter<M> | P,
+    performer?: P,
   ) {
-    const filter = (callback ? filterOrCallback : {}) as Filter<MessageFactory>
-    callback ??= filterOrCallback
+    const filter = (performer ? filterOrCallback : {}) as Filter<M>
+    performer ??= filterOrCallback as P
 
-    const removePerformer = add(messageClass, filter, callback)
-    const unregister = subscribe(this.name, messageClass)
+    const removePerformer = add(messageFactory, filter, performer)
+    const unregister = subscribe(this.name, messageFactory)
 
     return () => {
       if (removePerformer()) unregister()

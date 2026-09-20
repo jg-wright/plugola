@@ -48,12 +48,16 @@ export class MessageBus {
    */
   readonly on = <M extends MessageFactory>(
     name: string,
-    messageClass: M,
+    messageFactory: M,
   ): (() => void) => {
-    const routes = getOrInsert(this.#subscriberRoutes, messageClass, new Set())
+    const routes = getOrInsert(
+      this.#subscriberRoutes,
+      messageFactory,
+      new Set(),
+    )
     routes.add(name)
     return () => {
-      this.#subscriberRoutes.get(messageClass)?.delete(name)
+      this.#subscriberRoutes.get(messageFactory)?.delete(name)
     }
   }
 
@@ -64,12 +68,12 @@ export class MessageBus {
    */
   readonly register = <T>(
     name: string,
-    commandClass: CommandMessageFactory<T>,
+    commandFactory: CommandMessageFactory<T>,
   ): (() => void) => {
-    const routes = getOrInsert(this.#responderRoutes, commandClass, new Set())
+    const routes = getOrInsert(this.#responderRoutes, commandFactory, new Set())
     routes.add(name)
     return () => {
-      this.#responderRoutes.get(commandClass)?.delete(name)
+      this.#responderRoutes.get(commandFactory)?.delete(name)
     }
   }
 
@@ -81,12 +85,16 @@ export class MessageBus {
    */
   readonly intercept = (
     name: string,
-    messageClass: MessageFactory,
+    messageFactory: MessageFactory,
   ): (() => void) => {
-    const routes = getOrInsert(this.#interceptorRoutes, messageClass, new Set())
+    const routes = getOrInsert(
+      this.#interceptorRoutes,
+      messageFactory,
+      new Set(),
+    )
     routes.add(name)
     return () => {
-      this.#interceptorRoutes.get(messageClass)?.delete(name)
+      this.#interceptorRoutes.get(messageFactory)?.delete(name)
     }
   }
 
