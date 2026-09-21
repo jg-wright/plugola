@@ -9,6 +9,7 @@
     "packages/message-bus": {},
     "packages/plugin-manager": {},
     "packages/query-params": {},
+    "packages/queue": {},
     "packages/store": {},
     "packages/store-logger": {},
     "packages/streams": {},

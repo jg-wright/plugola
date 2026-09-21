@@ -29,6 +29,10 @@
       "path": "packages/query-params",
     },
     {
+      "name": "📦 @plugola/queue",
+      "path": "packages/queue",
+    },
+    {
       "name": "📦 @plugola/store",
       "path": "packages/store",
     },

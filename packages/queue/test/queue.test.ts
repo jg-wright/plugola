@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest'
-import { DiscriminatedQueue } from '../src/Queue/DiscriminatedQueue.ts'
-import { MethodQueue } from '../src/Queue/MethodQueue.ts'
-import { Queue } from '../src/Queue/Queue.ts'
+import { DiscriminatedQueue } from '../src/DiscriminatedQueue.ts'
+import { MethodQueue } from '../src/MethodQueue.ts'
+import { Queue } from '../src/Queue.ts'
 
 test('discriminated queue', () => {
   const fooSpy = vi.fn((_item: { name: string }) => {})

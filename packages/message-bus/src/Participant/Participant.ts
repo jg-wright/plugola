@@ -1,6 +1,6 @@
 import type { MessageBus } from '../MessageBus.ts'
 import { onAbort } from '../lang/AbortSignal.ts'
-import { MethodQueue } from '../Queue/MethodQueue.ts'
+import { MethodQueue } from '@plugola/queue'
 import { PerformerRegistry } from './PerformerRegistry.ts'
 import { MessageDispatcher } from './MessageDispatcher.ts'
 import { MessageGateway } from './MessageGateway.ts'
