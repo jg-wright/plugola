@@ -1,21 +1,21 @@
-export class Store<Actions extends BaseActions, State> {
-  #actionListeners: Partial<
-    Record<keyof Actions, ActionListener<Actions[keyof Actions], State>[]>
+export class Store<Actions extends BaseActions, Context> {
+  #actionSubscriptions: Partial<
+    Record<keyof Actions, ActionSubscription<Actions[keyof Actions], Context>[]>
   > = {}
   #dispatching = false
-  #listeners: Listener<Actions, State>[] = []
-  #staleListeners: Listener<Actions, State>[] = []
-  #reducers: Reducers<Actions, State>
+  #subscriptions: Subscription<Actions, Context>[] = []
+  #staleSubscriptions: Subscription<Actions, Context>[] = []
+  #reducers: Reducers<Actions, Context>
   #running = true
-  #state!: Readonly<State>
+  #context!: Readonly<Context>
 
-  constructor(reducers: Reducers<Actions, State>) {
+  constructor(reducers: Reducers<Actions, Context>) {
     this.#reducers = reducers
     this.dispatch('__init__', null)
   }
 
-  get state() {
-    return this.#state
+  get context() {
+    return this.#context
   }
 
   deinit() {
@@ -25,7 +25,7 @@ export class Store<Actions extends BaseActions, State> {
 
   dispatch<Action extends keyof Actions>(
     action: Action,
-    param: Actions[Action]
+    param: Actions[Action],
   ) {
     if (!this.#running) return
 
@@ -33,65 +33,71 @@ export class Store<Actions extends BaseActions, State> {
       throw new Error('You shouldnt dispatch actions from a reducer')
 
     this.#dispatching = true
-    const state = this.#reduce(action, param)
+    const context = this.#reduce(action, param)
     this.#dispatching = false
 
-    if (state === this.#state) this.#updateStaleSubscribers(action, param)
+    if (context === this.#context) this.#updateStaleSubscribers(action, param)
     else {
-      this.#state = Object.freeze(state)
+      this.#context = Object.freeze(context)
       this.#updateSubscribers(action, param)
     }
   }
 
   on<Action extends keyof Actions>(
     action: Action,
-    listener: ActionListener<Actions[Action], State>
+    subscription: ActionSubscription<Actions[Action], Context>,
   ): Unsubscriber {
-    this.#actionListeners[action] ??= []
-    return this.#subscribe(this.#actionListeners[action], listener)
+    this.#actionSubscriptions[action] ??= []
+    return this.#subscribe(this.#actionSubscriptions[action], subscription)
   }
 
-  subscribe(listener: Listener<Actions, State>): Unsubscriber {
-    if (this.#running) listener('__init__', null, this.#state)
-    return this.#subscribe(this.#listeners, listener)
+  subscribe(subscription: Subscription<Actions, Context>): Unsubscriber {
+    if (this.#running) subscription('__init__', null, this.#context)
+    return this.#subscribe(this.#subscriptions, subscription)
   }
 
-  subscribeToStaleEvents(listener: Listener<Actions, State>): Unsubscriber {
-    return this.#subscribe(this.#staleListeners, listener)
+  subscribeToStaleEvents(
+    subscription: Subscription<Actions, Context>,
+  ): Unsubscriber {
+    return this.#subscribe(this.#staleSubscriptions, subscription)
   }
 
-  #subscribe<T>(listeners: T[], listener: T): Unsubscriber {
-    listeners.push(listener)
+  #subscribe<T>(subscriptions: T[], subscription: T): Unsubscriber {
+    subscriptions.push(subscription)
 
     return () => {
-      const index = listeners.indexOf(listener)
-      listeners = [...listeners.slice(0, index), ...listeners.slice(index + 1)]
+      const index = subscriptions.indexOf(subscription)
+      subscriptions = [
+        ...subscriptions.slice(0, index),
+        ...subscriptions.slice(index + 1),
+      ]
     }
   }
 
   #reduce<Action extends keyof Actions>(
     action: Action,
-    param: Actions[Action]
+    param: Actions[Action],
   ) {
-    return this.#reducers[action]?.(param, this.#state) ?? this.#state
+    return this.#reducers[action]?.(param, this.#context) ?? this.#context
   }
 
   #updateSubscribers<Action extends keyof Actions>(
     action: Action,
-    param: Actions[Action]
+    param: Actions[Action],
   ) {
-    if (this.#actionListeners[action])
-      for (const listener of this.#actionListeners[action])
-        listener(param, this.#state)
-    for (const listener of this.#listeners) listener(action, param, this.#state)
+    if (this.#actionSubscriptions[action])
+      for (const subscription of this.#actionSubscriptions[action])
+        subscription(param, this.#context)
+    for (const subscription of this.#subscriptions)
+      subscription(action, param, this.#context)
   }
 
   #updateStaleSubscribers<Action extends keyof Actions>(
     action: Action,
-    param: Actions[Action]
+    param: Actions[Action],
   ) {
-    for (const listener of this.#staleListeners)
-      listener(action, param, this.#state)
+    for (const subscription of this.#staleSubscriptions)
+      subscription(action, param, this.#context)
   }
 }
 
@@ -100,24 +106,24 @@ export interface BaseActions {
   __deinit__?: null
 }
 
-export interface Reducer<Param, State> {
-  (param: Param, state: Readonly<State>): Readonly<State>
+export interface Reducer<Param, Context> {
+  (param: Param, context: Readonly<Context>): Readonly<Context>
 }
 
-export type Reducers<Actions extends BaseActions, State> = {
-  [Action in keyof Actions]: Reducer<Actions[Action], State>
+export type Reducers<Actions extends BaseActions, Context> = {
+  [Action in keyof Actions]: Reducer<Actions[Action], Context>
 }
 
-export interface Listener<Actions extends BaseActions, State> {
+export interface Subscription<Actions extends BaseActions, Context> {
   <Action extends keyof Actions>(
     action: Action,
     param: Actions[Action],
-    state: Readonly<State>
+    context: Readonly<Context>,
   ): any
 }
 
-export interface ActionListener<Param, State> {
-  (param: Param, state: Readonly<State>): any
+export interface ActionSubscription<Param, Context> {
+  (param: Param, context: Readonly<Context>): any
 }
 
 export interface Unsubscriber {

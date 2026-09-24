@@ -6,31 +6,32 @@ interface Actions extends BaseActions {
   bar: null
 }
 
-interface State {
+interface Context {
   foo: string
 }
 
-let store: Store<Actions, State>
+let store: Store<Actions, Context>
 
 beforeEach(() => {
-  store = new Store<Actions, State>({
+  store = new Store<Actions, Context>({
     __init__: () => ({ foo: '' }),
-    foo: (foo, state) => ({ ...state, foo }),
-    bar: (_, state) => (state.foo === 'bar' ? state : { ...state, foo: 'bar' }),
+    foo: (foo, context) => ({ ...context, foo }),
+    bar: (_, context) =>
+      context.foo === 'bar' ? context : { ...context, foo: 'bar' },
   })
 })
 
-test('state management', () => {
-  expect(store.state).toEqual({ foo: '' })
+test('context management', () => {
+  expect(store.context).toEqual({ foo: '' })
   store.dispatch('bar', null)
   // @ts-expect-error
   store.dispatch('bar', 'error')
-  expect(store.state).toEqual({ foo: 'bar' })
+  expect(store.context).toEqual({ foo: 'bar' })
   store.dispatch('foo', 'mung')
-  expect(store.state).toEqual({ foo: 'mung' })
+  expect(store.context).toEqual({ foo: 'mung' })
 })
 
-test('subscribing to state changes', () => {
+test('subscribing to context changes', () => {
   const onUpdate = vi.fn()
   store.subscribe(onUpdate)
   store.dispatch('bar', null)
