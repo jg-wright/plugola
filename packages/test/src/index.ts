@@ -12,7 +12,9 @@ export function testPlugin<
 >(
   testPlugin: TestPlugin<TestContext, PluginContext, EnableContext, RunContext>,
 ) {
-  for (const [testName, plugins] of Object.entries(testPlugin.tests)) {
+  for (const [testName, $plugins] of Object.entries(testPlugin.tests)) {
+    const plugins = Array.isArray($plugins) ? $plugins : [$plugins]
+
     describe(testName, () => {
       let testContext: TestContext
 
@@ -36,7 +38,13 @@ export function testPlugin<
           addRunContext: testPlugin.runContext,
         })
 
-        for (const plugin of plugins) pluginManager.registerPlugin(plugin)
+        pluginManager.registerPlugin(testPlugin.plugin)
+
+        for (let i = 0; i < plugins.length; i++) {
+          const plugin = plugins[i]
+          const name = plugin.name ?? `test ${i}`
+          pluginManager.registerPlugin({ ...plugin, name })
+        }
       })
 
       afterAll(() => pluginManager.disableAllPlugins())

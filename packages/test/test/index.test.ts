@@ -17,10 +17,17 @@ testPlugin({
     return { pluginName, gateway: messageBus.gateway(pluginName) }
   },
 
-  async afterInit({ messageBus }, running) {
-    messageBus.resume()
-    await running
-    messageBus.pause()
+  plugin: {
+    name: 'The plugin',
+    run({ gateway, message: { Mung }, mung }) {
+      gateway.register(Mung, (_, { send }) => {
+        send(mung)
+      })
+    },
+  },
+
+  async afterInit({ messageBus }, initiating) {
+    await messageBus.resumeUntil(initiating)
   },
 
   async afterRun({ messageBus }) {
@@ -30,35 +37,21 @@ testPlugin({
   tests: {
     'pluginContext is different for each plugin': [
       {
-        name: 'test',
         run({ pluginName }) {
           expect(pluginName).toBe('test')
         },
       },
       {
-        name: 'test 2',
         run({ pluginName }) {
           expect(pluginName).toBe('test 2')
         },
       },
     ],
 
-    'testContext is the same for every plugin': [
-      {
-        name: 'test',
-        run({ gateway, message: { Mung }, mung }) {
-          gateway.register(Mung, (_, { send }) => {
-            send(mung)
-          })
-        },
+    'testContext is the same for every plugin': {
+      async run({ gateway, message: { Mung }, mung }) {
+        expect(await gateway.invoke(Mung({})).first()).toBe(mung)
       },
-      {
-        name: 'test 2',
-        async run({ gateway, message: { Mung }, mung }) {
-          // console.info(await gateway.invoke(Mung({})).collect())
-          expect(await gateway.invoke(Mung({})).first()).toBe(mung)
-        },
-      },
-    ],
+    },
   },
 })
