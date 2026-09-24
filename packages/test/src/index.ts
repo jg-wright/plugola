@@ -43,13 +43,13 @@ export function testPlugin<
 
       test('init', async () => {
         const p = pluginManager.enableAllPlugins()
-        if (testPlugin.afterInit) await testPlugin.afterInit(p, testContext)
+        if (testPlugin.afterInit) await testPlugin.afterInit(testContext, p)
         else await p
       })
 
       test('run', async () => {
         const p = pluginManager.run()
-        if (testPlugin.afterRun) await testPlugin.afterRun(p, testContext)
+        if (testPlugin.afterRun) await testPlugin.afterRun(testContext, p)
         else await p
       })
     })
