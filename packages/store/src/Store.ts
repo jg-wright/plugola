@@ -1,17 +1,32 @@
+import { MethodQueue } from '@plugola/queue'
+
 export class Store<Actions extends BaseActions, Context> {
-  #actionSubscriptions: Partial<
+  #context!: Readonly<Context>
+
+  readonly #actionSubscriptions: Partial<
     Record<keyof Actions, ActionSubscription<Actions[keyof Actions], Context>[]>
   > = {}
-  #dispatching = false
-  #subscriptions: Subscription<Actions, Context>[] = []
-  #staleSubscriptions: Subscription<Actions, Context>[] = []
-  #reducers: Reducers<Actions, Context>
-  #running = true
-  #context!: Readonly<Context>
+  readonly #subscriptions: Subscription<Actions, Context>[] = []
+  readonly #staleSubscriptions: Subscription<Actions, Context>[] = []
+  readonly #reducers: Reducers<Actions, Context>
+  readonly #queue = new MethodQueue()
+
+  readonly dispatch = this.#queue.queueMethod(
+    <Action extends keyof Actions>(
+      ...args: ActionArgs<Action, Actions[Action]>
+    ) => {
+      const context = this.#reduce(...args)
+      if (context === this.#context) this.#updateStaleSubscribers(...args)
+      else {
+        this.#context = Object.freeze(context)
+        this.#updateSubscribers(...args)
+      }
+    },
+  )
 
   constructor(reducers: Reducers<Actions, Context>) {
     this.#reducers = reducers
-    this.dispatch('__init__', null)
+    this.#dispatchLifecycle('__init__')
   }
 
   get context() {
@@ -19,28 +34,22 @@ export class Store<Actions extends BaseActions, Context> {
   }
 
   deinit() {
-    this.dispatch('__deinit__', null)
-    this.#running = false
+    this.#dispatchLifecycle('__deinit__')
   }
 
-  dispatch<Action extends keyof Actions>(
-    action: Action,
-    param: Actions[Action],
-  ) {
-    if (!this.#running) return
+  // __init__/__deinit__ are the framework's own void actions on BaseActions.
+  // TS can't reduce ActionArgs<K, Actions[K]> through the class's own generic
+  // Actions, so originate these param-less dispatches via the resolved type.
+  #dispatchLifecycle(action: keyof BaseActions) {
+    ;(this.dispatch as (action: keyof BaseActions) => unknown)(action)
+  }
 
-    if (this.#dispatching)
-      throw new Error('You shouldnt dispatch actions from a reducer')
+  resume() {
+    this.#queue.start()
+  }
 
-    this.#dispatching = true
-    const context = this.#reduce(action, param)
-    this.#dispatching = false
-
-    if (context === this.#context) this.#updateStaleSubscribers(action, param)
-    else {
-      this.#context = Object.freeze(context)
-      this.#updateSubscribers(action, param)
-    }
+  pause() {
+    this.#queue.stop()
   }
 
   on<Action extends keyof Actions>(
@@ -52,7 +61,6 @@ export class Store<Actions extends BaseActions, Context> {
   }
 
   subscribe(subscription: Subscription<Actions, Context>): Unsubscriber {
-    if (this.#running) subscription('__init__', null, this.#context)
     return this.#subscribe(this.#subscriptions, subscription)
   }
 
@@ -75,40 +83,43 @@ export class Store<Actions extends BaseActions, Context> {
   }
 
   #reduce<Action extends keyof Actions>(
-    action: Action,
-    param: Actions[Action],
+    ...[action, ...params]: ActionArgs<Action, Actions[Action]>
   ) {
-    return this.#reducers[action]?.(param, this.#context) ?? this.#context
+    return (
+      this.#reducers[action]?.(
+        this.#context,
+        ...(params as [Actions[Action]]),
+      ) ?? this.#context
+    )
   }
 
   #updateSubscribers<Action extends keyof Actions>(
-    action: Action,
-    param: Actions[Action],
+    ...args: ActionArgs<Action, Actions[Action]>
   ) {
+    const [action, ...params] = args
     if (this.#actionSubscriptions[action])
       for (const subscription of this.#actionSubscriptions[action])
-        subscription(param, this.#context)
+        subscription(this.#context, ...(params as [Actions[Action]]))
     for (const subscription of this.#subscriptions)
-      subscription(action, param, this.#context)
+      subscription(this.#context, ...args)
   }
 
   #updateStaleSubscribers<Action extends keyof Actions>(
-    action: Action,
-    param: Actions[Action],
+    ...args: ActionArgs<Action, Actions[Action]>
   ) {
     for (const subscription of this.#staleSubscriptions)
-      subscription(action, param, this.#context)
+      subscription(this.#context, ...args)
   }
 }
 
 export interface BaseActions {
-  __init__: null
-  __deinit__?: null
+  __init__: void
+  __deinit__?: void
 }
 
-export interface Reducer<Param, Context> {
-  (param: Param, context: Readonly<Context>): Readonly<Context>
-}
+export type Reducer<Param, Context> = [Param] extends [void]
+  ? (context: Readonly<Context>) => Readonly<Context>
+  : (context: Readonly<Context>, param: Param) => Readonly<Context>
 
 export type Reducers<Actions extends BaseActions, Context> = {
   [Action in keyof Actions]: Reducer<Actions[Action], Context>
@@ -116,16 +127,19 @@ export type Reducers<Actions extends BaseActions, Context> = {
 
 export interface Subscription<Actions extends BaseActions, Context> {
   <Action extends keyof Actions>(
-    action: Action,
-    param: Actions[Action],
     context: Readonly<Context>,
+    ...args: ActionArgs<Action, Actions[Action]>
   ): any
 }
 
-export interface ActionSubscription<Param, Context> {
-  (param: Param, context: Readonly<Context>): any
-}
+export type ActionSubscription<Param, Context> = [Param] extends [void]
+  ? (context: Readonly<Context>) => any
+  : (context: Readonly<Context>, param: Param) => any
 
 export interface Unsubscriber {
   (): void
 }
+
+type ActionArgs<Action, Param> = Param extends void
+  ? [action: Action]
+  : [action: Action, param: Param]
