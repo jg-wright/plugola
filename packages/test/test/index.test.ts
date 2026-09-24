@@ -1,21 +1,30 @@
 import { expect } from 'vitest'
 import { testPlugin } from '../src/index.js'
-import { Invokables } from '@plugola/invoke'
+import { command, MessageBus } from '@plugola/message-bus'
 
 testPlugin({
-  pluginContext(pluginName) {
-    return { pluginName }
-  },
-
   testContext() {
     return {
       mung: {},
-      $i: new Invokables<{ mung: { args: []; return: unknown } }>(),
+      message: {
+        Mung: command<{}, {}>('mung'),
+      },
+      messageBus: new MessageBus(),
     }
   },
 
-  afterRun({ $i }) {
-    return $i.start()
+  pluginContext(pluginName, { messageBus }) {
+    return { pluginName, gateway: messageBus.gateway(pluginName) }
+  },
+
+  async afterInit({ messageBus }, running) {
+    messageBus.resume()
+    await running
+    messageBus.pause()
+  },
+
+  async afterRun({ messageBus }) {
+    messageBus.resume()
   },
 
   tests: {
@@ -37,14 +46,17 @@ testPlugin({
     'testContext is the same for every plugin': [
       {
         name: 'test',
-        run({ $i, mung }) {
-          $i.register('mung', () => mung)
+        run({ gateway, message: { Mung }, mung }) {
+          gateway.register(Mung, (_, { send }) => {
+            send(mung)
+          })
         },
       },
       {
         name: 'test 2',
-        async run({ $i, mung }) {
-          expect(await $i.invoke('mung')).toBe(mung)
+        async run({ gateway, message: { Mung }, mung }) {
+          // console.info(await gateway.invoke(Mung({})).collect())
+          expect(await gateway.invoke(Mung({})).first()).toBe(mung)
         },
       },
     ],

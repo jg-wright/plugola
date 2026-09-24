@@ -6,9 +6,10 @@ export interface TestPlugin<
   EnableContext extends Record<string, unknown>,
   RunContext extends Record<string, unknown>,
 > {
-  afterRun?(testContext: TestContext): any
+  afterInit?(testContext: TestContext, running: Promise<void>): any
+  afterRun?(testContext: TestContext, running: Promise<void>): any
   enableContext?(pluginName: string): EnableContext
-  pluginContext?(pluginName: string): PluginContext
+  pluginContext?(pluginName: string, testContext: TestContext): PluginContext
   runContext?(pluginName: string): RunContext
   testContext?(): TestContext
   tests: Record<

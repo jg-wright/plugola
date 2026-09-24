@@ -8,13 +8,13 @@ export function testPlugin<
   TestContext extends Record<string, unknown>,
   PluginContext extends Record<string, unknown>,
   EnableContext extends Record<string, unknown>,
-  RunContext extends Record<string, unknown>
+  RunContext extends Record<string, unknown>,
 >(
-  testPlugin: TestPlugin<TestContext, PluginContext, EnableContext, RunContext>
+  testPlugin: TestPlugin<TestContext, PluginContext, EnableContext, RunContext>,
 ) {
   for (const [testName, plugins] of Object.entries(testPlugin.tests)) {
     describe(testName, () => {
-      let testContext: TestContext | undefined
+      let testContext: TestContext
 
       let pluginManager: PluginManager<
         TestContext & PluginContext,
@@ -23,13 +23,13 @@ export function testPlugin<
       >
 
       beforeAll(() => {
-        testContext = testPlugin.testContext?.()
+        testContext = testPlugin.testContext?.() ?? ({} as TestContext)
 
         pluginManager = new PluginManager({
           addContext(pluginName) {
             return {
               ...testContext,
-              ...testPlugin.pluginContext?.(pluginName),
+              ...testPlugin.pluginContext?.(pluginName, testContext),
             } as TestContext & PluginContext
           },
           addEnableContext: testPlugin.enableContext,
@@ -41,12 +41,16 @@ export function testPlugin<
 
       afterAll(() => pluginManager.disableAllPlugins())
 
-      test('init', () => pluginManager.enableAllPlugins())
+      test('init', async () => {
+        const p = pluginManager.enableAllPlugins()
+        if (testPlugin.afterInit) await testPlugin.afterInit(p, testContext)
+        else await p
+      })
 
       test('run', async () => {
         const p = pluginManager.run()
-        await testPlugin.afterRun?.(testContext || ({} as TestContext))
-        return p
+        if (testPlugin.afterRun) await testPlugin.afterRun(p, testContext)
+        else await p
       })
     })
   }
