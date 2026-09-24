@@ -208,7 +208,7 @@ export class MessageBus {
   /**
    * Pauses participants: their queues stop draining and inbound messages buffer
    * until resumed. With a `name`, pauses just that participant; with no argument,
-   * pauses every participant on the bus. Reversible via {@link MessageBus.resume}.
+   * pauses every participant on the bus. Reversible via {@link MessageBus.prototype.resume}.
    */
   pause(name?: string) {
     if (name === undefined)
