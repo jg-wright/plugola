@@ -186,7 +186,7 @@ export class MessageBus {
   /**
    * Permanently tears down the named participant: fires its abort signal, clears
    * its handlers, and removes it from all routing so its name can be reused.
-   * Unlike {@link MessageBus.pause}, this cannot be undone.
+   * Unlike {@link MessageBus.prototype.pause}, this cannot be undone.
    */
   abort(name: string, reason?: Error) {
     this.#participants.get(name)?.abort(reason)
@@ -214,5 +214,17 @@ export class MessageBus {
     if (name === undefined)
       for (const participant of this.#participants.values()) participant.pause()
     else this.#participants.get(name)?.pause()
+  }
+
+  /**
+   * Resumes the bus until the given promise settles, then pause again.
+   */
+  async resumeUntil(promise: Promise<unknown>) {
+    this.resume()
+    try {
+      await promise
+    } finally {
+      this.pause()
+    }
   }
 }
