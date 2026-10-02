@@ -17,7 +17,7 @@ import { type Named } from './Named.ts'
  *   by factory identity (as it once routed by class identity).
  *
  * The transport codec (`$encode`/`$decode`) is layered on separately, by a
- * Channel's `MessageRegistry` at registration time — see
+ * `TransportableMessageRegistry` at registration time — see
  * {@link makeTransportable}. A factory used only in-process never carries one.
  *
  * This is EIP's *Message Translator* declared at the point of definition. A
@@ -32,7 +32,9 @@ import { type Named } from './Named.ts'
  * c.$name // 'clicked'
  * ```
  */
-export function message<T extends object>(name: string): MessageFactory<T> {
+export function message<T extends object, Name extends string = string>(
+  name: Name,
+): MessageFactory<T> {
   return createFactory(name) as MessageFactory<T>
 }
 
@@ -46,7 +48,7 @@ export function message<T extends object>(name: string): MessageFactory<T> {
  * payload type parameter would impose. Messages are **not** constructed with
  * `new`; call a {@link MessageFactory}.
  */
-export interface Message extends Named {
+export interface Message<Name extends string = string> extends Named<Name> {
   /** The factory that built this message — the bus's routing identity. */
   readonly $factory: MessageFactory
 }
@@ -57,8 +59,11 @@ export interface Message extends Named {
  * instance, is the routing key, and a {@link MessagingBridge} reads `$name` (and,
  * once registered, `$encode`/`$decode`) from it.
  */
-export interface MessageFactory<T extends object = any> extends Named {
-  (payload: T): Message & T
+export interface MessageFactory<
+  T extends object = any,
+  Name extends string = string,
+> extends Named<Name> {
+  (payload: T): Message<Name> & T
 }
 
 /** The message a factory builds — its payload plus {@link Message} metadata. */

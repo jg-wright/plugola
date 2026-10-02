@@ -1,9 +1,9 @@
-// Type-level tests for MessageRegistry. Checked with `tsc` (see `test:types`),
-// not run — the exported `assert*` functions exist only so the compiler checks
-// their bodies.
+// Type-level tests for TransportableMessageRegistry. Checked with `tsc` (see
+// `test:types`), not run — the exported `assert*` functions exist only so the
+// compiler checks their bodies.
 
 import { expectTypeOf } from 'vitest'
-import { MessageRegistry } from '../src/Channel/MessageRegistry.ts'
+import { TransportableMessageRegistry } from '../src/MessageRegistry/TransportableMessageRegistry.ts'
 import type { MessageFactory } from '../src/Message/Message.ts'
 import type {
   CommandMessageFactory,
@@ -12,7 +12,7 @@ import type {
 import type { Transportable } from '../src/Message/Transportable.ts'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 
-const registry = new MessageRegistry()
+const registry = new TransportableMessageRegistry()
 
 // register() returns the precise message class type ...
 const Clicked = registry.registerMessage<{ x: number; y: number }>('clicked')

@@ -4,7 +4,7 @@ import type { CommandMessageFactory } from '../Message/CommandMessage.ts'
 import type { Transportable } from '../Message/Transportable.ts'
 import type { MessageGateway } from '../Participant/MessageGateway.ts'
 import type { Channel, Frame, SerializedError } from '../Channel/Channel.ts'
-import type { MessageRegistry } from '../Channel/MessageRegistry.ts'
+import type { TransportableMessageRegistry } from '../MessageRegistry/TransportableMessageRegistry.ts'
 import { onAbort } from '../lang/AbortSignal.ts'
 
 /**
@@ -12,7 +12,7 @@ import { onAbort } from '../lang/AbortSignal.ts'
  * a {@link Channel}, replicating messages and commands between them. It joins the
  * bus as an ordinary participant, so the bus core needs no knowledge of transports.
  *
- * For every class in the {@link MessageRegistry}:
+ * For every class in the {@link TransportableMessageRegistry}:
  *
  * - a **message** is relayed both ways — subscribed locally and sent as a frame
  *   ({@link MessageGateway.prototype.on} → {@link Channel.send}), and decoded and re-emitted
@@ -37,7 +37,7 @@ import { onAbort } from '../lang/AbortSignal.ts'
 export class MessagingBridge {
   readonly #gateway: MessageGateway
   readonly #channel: Channel
-  readonly #registry: MessageRegistry
+  readonly #registry: TransportableMessageRegistry
   readonly #correlationId: () => string
   /** Outbound commands (we invoked) awaiting the peer's responses, by correlation id. */
   readonly #pending = new Map<string, PendingCommand>()
@@ -47,7 +47,7 @@ export class MessagingBridge {
   constructor(
     bus: MessageBus,
     channel: Channel,
-    registry: MessageRegistry,
+    registry: TransportableMessageRegistry,
     {
       correlationId = () => crypto.randomUUID(),
       name = 'bridge',
@@ -121,13 +121,13 @@ export class MessagingBridge {
   #receive(frame: Frame) {
     switch (frame.kind) {
       case 'message': {
-        const factory = this.#registry.factoryFor(frame.name)
+        const factory = this.#registry.messageFactoryFor(frame.name)
         if (!factory) return
         this.#gateway.emit(markFromWire(factory.$decode(frame.payload)))
         break
       }
       case 'command': {
-        const factory = this.#registry.factoryFor(frame.name)
+        const factory = this.#registry.commandFactoryFor(frame.name)
         if (!factory) return
         this.#invokeForPeer(
           markFromWire(factory.$decode(frame.payload)),

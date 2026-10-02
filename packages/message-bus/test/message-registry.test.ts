@@ -1,10 +1,11 @@
 import { expect, test, vi } from 'vitest'
-import { MessageRegistry } from '../src/Channel/MessageRegistry.ts'
+import { MessageRegistry } from '../src/MessageRegistry/MessageRegistry.ts'
 import { MessageBus } from '../src/MessageBus.ts'
 
-test('register() creates a routable message factory and records it', () => {
-  const registry = new MessageRegistry()
-  const Clicked = registry.registerMessage<{ x: number }>('clicked')
+test('registerMessage() creates a routable message factory and records it', () => {
+  const { clicked } = MessageRegistry.create()
+    .message('clicked')
+    .as<{ x: number }>().messages
 
   const bus = new MessageBus()
   const a = bus.gateway('a')
@@ -12,97 +13,96 @@ test('register() creates a routable message factory and records it', () => {
   bus.resume()
 
   const spy = vi.fn()
-  a.on(Clicked, spy)
-  b.emit(Clicked({ x: 1 }))
+  a.on(clicked, spy)
+  b.emit(clicked({ x: 1 }))
 
   expect(spy).toHaveBeenCalledTimes(1)
-  expect(registry.factoryFor('clicked')).toBe(Clicked)
 })
 
-test('command() creates a command factory and records it separately from messages', () => {
-  const registry = new MessageRegistry()
-  const ListFiles = registry.registerCommand<{ dir: string }, string>(
-    'list-files',
-  )
+test('registerCommand() records a command separately from messages', () => {
+  const registry = MessageRegistry.create()
+    .command('listFiles')
+    .as<{ dir: string }, string>()
 
-  expect(ListFiles({ dir: '/tmp' }).$factory).toBe(ListFiles)
-  expect(registry.factoryFor('list-files')).toBe(ListFiles)
-  expect([...registry.commandFactories]).toContain(ListFiles)
-  expect([...registry.messageFactories]).not.toContain(ListFiles)
+  const { listFiles } = registry.commands
+
+  expect(listFiles({ dir: '/tmp' }).$factory).toBe(listFiles)
+  expect(registry.commandFactoryFor('listFiles')).toBe(listFiles)
+  expect([...registry.commandFactories]).toContain(listFiles)
+  expect([...registry.messageFactories]).not.toContain(listFiles)
 })
 
-test('a registered message gets a default codec that round-trips the payload, dropping $-metadata', () => {
-  const registry = new MessageRegistry()
-  const Clicked = registry.registerMessage<{ x: number; y: number }>('clicked')
+test('a registered factory is plain — no transport codec is layered on', () => {
+  const { clicked } = MessageRegistry.create()
+    .message('clicked')
+    .as<{ x: number }>().messages
 
-  const payload = Clicked.$encode(Clicked({ x: 1, y: 2 }))
-  expect(payload).toEqual({ x: 1, y: 2 })
-
-  // toEqual proves the rebuilt message carries the right payload, $name, and
-  // $factory (its routing identity).
-  const decoded = Clicked.$decode(payload)
-  expect(decoded).toEqual(Clicked({ x: 1, y: 2 }))
+  // The base registry adds name-collision safety and lookup only; it does not
+  // require (or add) Transportability, so there is no `$encode`/`$decode`.
+  expect('$encode' in clicked).toBe(false)
+  expect('$decode' in clicked).toBe(false)
 })
 
-test('a custom codec overrides encode and decode', () => {
-  const registry = new MessageRegistry()
-  const encode = vi.fn((m: { at: Date }) => ({ at: m.at.toISOString() }))
-  const decode = vi.fn((p: { at: string }) => Occurred({ at: new Date(p.at) }))
-  const Occurred = registry.registerMessage<{ at: Date }>('occurred', {
-    encode,
-    decode,
-  })
+test('factoryFor() resolves a name to its factory, or undefined', () => {
+  const registry = MessageRegistry.create()
+    .message('clicked')
+    .as<{ x: number }>()
 
-  const instance = Occurred({ at: new Date('2020-01-01T00:00:00.000Z') })
-  const payload = Occurred.$encode(instance)
-  expect(payload).toEqual({ at: '2020-01-01T00:00:00.000Z' })
-  expect(encode).toHaveBeenCalledWith(instance)
+  const { clicked } = registry.messages
 
-  const decoded = Occurred.$decode(payload)
-  expect(decoded.at).toEqual(new Date('2020-01-01T00:00:00.000Z'))
-  expect(decode).toHaveBeenCalledWith(payload)
+  expect(registry.messageFactoryFor('clicked')).toBe(clicked)
+  expect(
+    // @ts-expect-error Argument of type '"unknown"' is not assignable to parameter of type '"clicked"'.
+    registry.messageFactoryFor('unknown'),
+  ).toBeUndefined()
 })
 
-test('a registered command round-trips through its default codec', () => {
-  const registry = new MessageRegistry()
-  const ListFiles = registry.registerCommand<{ dir: string }, string>(
-    'list-files',
-  )
+test('messageFactories and commandFactories each yield their own kind', () => {
+  const registry = MessageRegistry.create()
 
-  const listFiles = ListFiles({ dir: '/tmp' })
-  expect(ListFiles.$decode(ListFiles.$encode(listFiles))).toEqual(listFiles)
+    .message('clicked')
+    .as<{ x: number }>()
+
+    .command('listFiles')
+    .as<{ dir: string }, string>()
+
+  const { clicked } = registry.messages
+  const { listFiles } = registry.commands
+
+  expect([...registry.messageFactories]).toEqual([clicked])
+  expect([...registry.commandFactories]).toEqual([listFiles])
 })
 
-test('factoryFor() resolves a name to its factory for decoding, or undefined', () => {
-  const registry = new MessageRegistry()
-  const Clicked = registry.registerMessage<{ x: number }>('clicked')
+test('combine() merges the factories of several registries into one', () => {
+  const clicks = MessageRegistry.create().message('clicked').as<{ x: number }>()
 
-  const decoded = registry.factoryFor('clicked')!.$decode({ x: 1 })
-  expect(decoded.$factory).toBe(Clicked)
-  expect(decoded).toEqual(Clicked({ x: 1 }))
+  const files = MessageRegistry.create()
+    .command('listFiles')
+    .as<{ dir: string }, string>()
 
-  expect(registry.factoryFor('unknown')).toBeUndefined()
+  const combined = MessageRegistry.combine(clicks, files)
+
+  const { clicked } = clicks.messages
+  const { listFiles } = files.commands
+
+  expect(combined.messageFactoryFor('clicked')).toBe(clicked)
+  expect(combined.commandFactoryFor('listFiles')).toBe(listFiles)
+  expect([...combined.messageFactories]).toEqual([clicked])
+  expect([...combined.commandFactories]).toEqual([listFiles])
 })
 
-test('messageFactories and commandFactories each yield their own kind — the bridge forward sets', () => {
-  const registry = new MessageRegistry()
-  const Clicked = registry.registerMessage<{ x: number }>('clicked')
-  const ListFiles = registry.registerCommand<{ dir: string }, string>(
-    'list-files',
-  )
+test('combine() throws on a name used by more than one registry', () => {
+  const a = MessageRegistry.create().message('clicked').as<{ x: number }>()
+  const b = MessageRegistry.create().message('clicked').as<{ y: number }>()
 
-  expect([...registry.messageFactories]).toEqual([Clicked])
-  expect([...registry.commandFactories]).toEqual([ListFiles])
+  expect(() => MessageRegistry.combine(a, b)).toThrow(/already registered/)
 })
 
 test('a duplicate name throws, whether message or command', () => {
-  const registry = new MessageRegistry()
-  registry.registerMessage<{ x: number }>('clicked')
+  const registry = MessageRegistry.create()
+    .message('clicked')
+    .as<{ x: number }>()
 
-  expect(() => registry.registerMessage<{ y: number }>('clicked')).toThrow(
-    /already registered/,
-  )
-  expect(() =>
-    registry.registerCommand<{ dir: string }, string>('clicked'),
-  ).toThrow(/already registered/)
+  expect(() => registry.message('clicked')).toThrow(/already registered/)
+  expect(() => registry.command('clicked')).toThrow(/already registered/)
 })

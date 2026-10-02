@@ -12,10 +12,10 @@ import { type Named } from './Named.ts'
  * const files = await gateway.invoke(ListFiles({ dir: '/tmp' })).collect()
  * ```
  */
-export function command<T extends object, R>(
-  name: string,
-): CommandMessageFactory<R, T> {
-  return createFactory(name) as unknown as CommandMessageFactory<R, T>
+export function command<T extends object, R, Name extends string = string>(
+  name: Name,
+): CommandMessageFactory<R, T, Name> {
+  return createFactory(name) as CommandMessageFactory<R, T, Name>
 }
 
 /**
@@ -26,7 +26,10 @@ export function command<T extends object, R>(
  *
  * @typeParam R - the type of each value responders stream back.
  */
-export interface CommandMessage<R = unknown> extends Message {
+export interface CommandMessage<
+  R = unknown,
+  Name extends string = string,
+> extends Message<Name> {
   /** Phantom field carrying `R` for inference; never present at runtime. */
   readonly $responseType: R
 }
@@ -35,8 +38,9 @@ export interface CommandMessage<R = unknown> extends Message {
 export interface CommandMessageFactory<
   R = unknown,
   T extends object = any,
-> extends Named {
-  (payload: T): CommandMessage<R> & T
+  Name extends string = string,
+> extends Named<Name> {
+  (payload: T): CommandMessage<R, Name> & T
 }
 
 /**

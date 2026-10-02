@@ -110,7 +110,7 @@ export class MessageBus {
     if (this.#participants.has(name))
       throw new Error(`Gateway "${name}" has already been registered`)
 
-    const participant = new Participant(this, name, abortSignal)
+    const participant = new Participant(this, name, { abortSignal })
     this.#participants.set(name, participant)
 
     participant.onAbort(() => {

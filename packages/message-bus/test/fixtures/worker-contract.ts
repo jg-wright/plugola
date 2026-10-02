@@ -2,14 +2,14 @@ import { Worker } from 'node:worker_threads'
 import {
   MessagingBridge,
   MessageBus,
-  MessageRegistry,
+  TransportableMessageRegistry,
   PortChannel,
   type PortLike,
 } from '../../src/index.ts'
 
 export function createBridge(port: PortLike) {
   const bus = new MessageBus()
-  const registry = new MessageRegistry()
+  const registry = new TransportableMessageRegistry()
   const Ready = registry.registerMessage<{ from: string }>('ready')
   const Sum = registry.registerCommand<{ a: number; b: number }, number>('sum')
   new MessagingBridge(bus, new PortChannel(port), registry)

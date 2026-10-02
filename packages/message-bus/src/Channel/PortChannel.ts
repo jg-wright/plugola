@@ -21,10 +21,9 @@ export class PortChannel implements Channel {
   }
 
   receive(handler: (frame: Frame) => void) {
-    const listener = (frame: Frame) => handler(frame)
-    this.#port.on('message', listener)
+    this.#port.on('message', handler)
     return () => {
-      this.#port.off('message', listener)
+      this.#port.off('message', handler)
     }
   }
 }

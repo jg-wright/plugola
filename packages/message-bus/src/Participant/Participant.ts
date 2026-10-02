@@ -1,6 +1,6 @@
 import type { MessageBus } from '../MessageBus.ts'
 import { onAbort } from '../lang/AbortSignal.ts'
-import { MethodQueue } from '@plugola/queue'
+import { MethodQueue, Queuable } from '@plugola/queue'
 import { PerformerRegistry } from './PerformerRegistry.ts'
 import { MessageDispatcher } from './MessageDispatcher.ts'
 import { MessageGateway } from './MessageGateway.ts'
@@ -20,10 +20,8 @@ import { MessageGateway } from './MessageGateway.ts'
  * Both faces read and write the same kernel, so neither owns the other; the bus
  * owns the participant and hands the application its gateway.
  */
-export class Participant {
+export class Participant extends Queuable {
   readonly registry = new PerformerRegistry()
-
-  readonly queue = new MethodQueue()
 
   readonly abortSignal: AbortSignal
 
@@ -35,7 +33,15 @@ export class Participant {
 
   readonly #abortController = new AbortController()
 
-  constructor(bus: MessageBus, name: string, abortSignal?: AbortSignal) {
+  constructor(
+    bus: MessageBus,
+    name: string,
+    {
+      abortSignal,
+      queue = new MethodQueue(),
+    }: { abortSignal?: AbortSignal; queue?: MethodQueue } = {},
+  ) {
+    super(queue)
     this.name = name
     this.abortSignal = abortSignal
       ? AbortSignal.any([abortSignal, this.#abortController.signal])
@@ -53,14 +59,6 @@ export class Participant {
 
   get aborted() {
     return this.abortSignal.aborted
-  }
-
-  resume() {
-    this.queue.start()
-  }
-
-  pause() {
-    this.queue.stop()
   }
 
   abort(reason?: unknown) {
