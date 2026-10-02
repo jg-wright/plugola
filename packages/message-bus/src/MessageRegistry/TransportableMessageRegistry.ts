@@ -56,7 +56,7 @@ export class TransportableMessageRegistry<
   override message<Name extends string>(name: Name) {
     this.assertUnregisteredMessage(name)
     return {
-      as: <T extends object>(
+      as: <T extends object = {}>(
         codec?: Partial<Codec<Message & T>>,
       ): TransportableMessageRegistry<
         MFs & { [N in Name]: MessageFactory<T, Name> & Transportable<T> },
@@ -72,7 +72,7 @@ export class TransportableMessageRegistry<
   override command<Name extends string>(name: Name) {
     this.assertUnregisteredCommand(name)
     return {
-      as: <T extends object, R>(
+      as: <T extends object = {}, R = unknown>(
         codec?: Partial<Codec<CommandMessage<R> & T>>,
       ): TransportableMessageRegistry<
         MFs,

@@ -31,6 +31,37 @@ test('a command factory builds messages that point back at it, with the same met
   expect(listFiles.dir).toBe('/tmp')
 })
 
+test('a message can be built with no payload', () => {
+  const Opened = message('opened')
+
+  const opened = Opened()
+  expect(opened.$name).toBe('opened')
+  expect(opened.$factory).toBe(Opened)
+})
+
+test('a command can be built with no payload', () => {
+  const Ping = command<{}, 'pong'>('ping')
+
+  const ping = Ping()
+  expect(ping.$name).toBe('ping')
+  expect(ping.$factory).toBe(Ping)
+})
+
+test('a no-payload message is routable on the bus by its factory identity', () => {
+  const Opened = message('opened')
+  const bus = new MessageBus()
+  const a = bus.gateway('a')
+  const b = bus.gateway('b')
+  bus.resume()
+
+  const spy = vi.fn()
+  a.on(Opened, spy)
+  b.emit(Opened())
+
+  expect(spy).toHaveBeenCalledTimes(1)
+  expect(spy.mock.calls[0][0].$factory).toBe(Opened)
+})
+
 test('a generated message is routable on the bus by its factory identity', () => {
   const Clicked = message<{ x: number }>('clicked')
   const bus = new MessageBus()

@@ -1,5 +1,5 @@
 import { type Codec, defaultEncode } from './Codec.ts'
-import type { MessageFactory, MessageOf } from './Message.ts'
+import type { MessageOf } from './Message.ts'
 
 /**
  * Layers a transport {@link Codec} onto a message factory — the `$encode` /
@@ -9,7 +9,7 @@ import type { MessageFactory, MessageOf } from './Message.ts'
  * default `encode` keeps the payload (non-`$` fields) and the default `decode`
  * rebuilds the message by calling the factory.
  */
-export function makeTransportable<F extends MessageFactory>(
+export function makeTransportable<F extends (...args: any) => any>(
   factory: F,
   codec?: Partial<Codec<MessageOf<F>>>,
 ): F & Transportable<MessageOf<F>> {

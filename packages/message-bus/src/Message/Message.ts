@@ -24,15 +24,22 @@ import { type Named } from './Named.ts'
  * factory is **final** identity — it is registered and routed as itself, so
  * wrapping or re-creating it would not cross a {@link MessagingBridge}.
  *
+ * A message need not carry a payload. Omit the type argument (it defaults to
+ * `{}`) and the factory is callable with no argument — `Opened()` — for the
+ * common case of a message that is purely its name.
+ *
  * @example
  * ```ts
  * const Clicked = message<{ x: number; y: number }>('clicked')
  * const c = Clicked({ x: 1, y: 2 })
  * c.x // 1
  * c.$name // 'clicked'
+ *
+ * const Opened = message('opened')
+ * Opened().$name // 'opened' — no payload
  * ```
  */
-export function message<T extends object, Name extends string = string>(
+export function message<T extends object = {}, Name extends string = string>(
   name: Name,
 ): MessageFactory<T> {
   return createFactory(name) as MessageFactory<T>
@@ -63,8 +70,18 @@ export interface MessageFactory<
   T extends object = any,
   Name extends string = string,
 > extends Named<Name> {
-  (payload: T): Message<Name> & T
+  (...args: PayloadArgs<T>): Message<Name> & T
 }
+
+/**
+ * The argument list a {@link MessageFactory} (or {@link CommandMessageFactory})
+ * takes for payload `T`: a required `payload` when `T` has required fields, and
+ * an optional one when it has none (`{} extends T`), so a payload-free message
+ * is built by calling its factory with no argument.
+ */
+export type PayloadArgs<T extends object> = {} extends T
+  ? [payload?: T]
+  : [payload: T]
 
 /** The message a factory builds — its payload plus {@link Message} metadata. */
 export type MessageOf<F> = F extends (...args: any) => infer M ? M : never
@@ -76,7 +93,7 @@ export type MessageOf<F> = F extends (...args: any) => infer M ? M : never
  * as one (see {@link MessageRegistry}), not any flag it carries.
  */
 export function createFactory(name: string): MessageFactory {
-  const factory = ((payload: object) => ({
+  const factory = ((payload?: object) => ({
     ...payload,
     $name: name,
     $factory: factory,

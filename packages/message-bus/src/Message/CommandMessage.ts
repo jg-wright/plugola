@@ -1,4 +1,4 @@
-import { createFactory, type Message } from './Message.ts'
+import { createFactory, type Message, type PayloadArgs } from './Message.ts'
 import { type Named } from './Named.ts'
 
 /**
@@ -6,16 +6,25 @@ import { type Named } from './Named.ts'
  * `R` values back from responders. `T` is the (serializable) payload; `R` is the
  * response value type surfaced through `gateway.invoke(...).collect()`.
  *
+ * Like {@link message}, a command need not carry a payload: leave `T` as its
+ * `{}` default and the factory is callable with no argument — `Ping()` — for a
+ * command that is purely its name (its response type `R` stands on its own).
+ *
  * @example
  * ```ts
  * const ListFiles = command<{ dir: string }, string>('list-files')
  * const files = await gateway.invoke(ListFiles({ dir: '/tmp' })).collect()
+ *
+ * const Ping = command<{}, 'pong'>('ping')
+ * const pongs = await gateway.invoke(Ping()).collect() // no payload
  * ```
  */
-export function command<T extends object, R, Name extends string = string>(
-  name: Name,
-): CommandMessageFactory<R, T, Name> {
-  return createFactory(name) as CommandMessageFactory<R, T, Name>
+export function command<
+  T extends object = {},
+  R = unknown,
+  Name extends string = string,
+>(name: Name): CommandMessageFactory<R, T, Name> {
+  return createFactory(name) as unknown as CommandMessageFactory<R, T, Name>
 }
 
 /**
@@ -40,7 +49,7 @@ export interface CommandMessageFactory<
   T extends object = any,
   Name extends string = string,
 > extends Named<Name> {
-  (payload: T): CommandMessage<R, Name> & T
+  (...args: PayloadArgs<T>): CommandMessage<R, Name> & T
 }
 
 /**

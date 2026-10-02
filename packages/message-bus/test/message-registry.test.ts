@@ -19,6 +19,31 @@ test('registerMessage() creates a routable message factory and records it', () =
   expect(spy).toHaveBeenCalledTimes(1)
 })
 
+test('a message registered with no payload type is built with no argument', () => {
+  const { opened } = MessageRegistry.create().message('opened').as().messages
+
+  const bus = new MessageBus()
+  const a = bus.gateway('a')
+  const b = bus.gateway('b')
+  bus.resume()
+
+  const spy = vi.fn()
+  a.on(opened, spy)
+  b.emit(opened())
+
+  expect(spy).toHaveBeenCalledTimes(1)
+  expect(opened().$factory).toBe(opened)
+})
+
+test('a command registered with no payload type is built with no argument', () => {
+  const registry = MessageRegistry.create().command('ping').as<{}, 'pong'>()
+
+  const { ping } = registry.commands
+
+  expect(ping().$factory).toBe(ping)
+  expect(registry.commandFactoryFor('ping')).toBe(ping)
+})
+
 test('registerCommand() records a command separately from messages', () => {
   const registry = MessageRegistry.create()
     .command('listFiles')

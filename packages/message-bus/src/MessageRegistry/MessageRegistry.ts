@@ -89,7 +89,7 @@ export class MessageRegistry<
   message<Name extends string>(name: Name) {
     this.assertUnregisteredMessage(name)
     return {
-      as: <T extends object>(): MessageRegistry<
+      as: <T extends object = {}>(): MessageRegistry<
         MFs & { [N in Name]: MessageFactory<T, Name> },
         CFs
       > => {
@@ -111,7 +111,7 @@ export class MessageRegistry<
   command<Name extends string>(name: Name) {
     this.assertUnregisteredCommand(name)
     return {
-      as: <T extends object, R>(): MessageRegistry<
+      as: <T extends object = {}, R = unknown>(): MessageRegistry<
         MFs,
         CFs & { [N in Name]: CommandMessageFactory<R, T, Name> }
       > => {

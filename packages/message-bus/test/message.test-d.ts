@@ -23,6 +23,19 @@ expectTypeOf(clicked.$name).toEqualTypeOf<string>()
 expectTypeOf(clicked).toExtend<Message>()
 expectTypeOf(Clicked.$name).toEqualTypeOf<string>()
 
+// --- message(): no payload when the type argument is omitted ----------------
+
+const Opened = message('opened')
+
+const opened = Opened()
+expectTypeOf(opened).toExtend<Message>()
+expectTypeOf(opened.$name).toEqualTypeOf<string>()
+
+export function assertPayloadIsRequiredWhenPresent() {
+  // @ts-expect-error a message with required payload fields cannot be called bare
+  Clicked()
+}
+
 // --- command(): the response type flows through to invoke() -----------------
 
 const ListFiles = command<{ dir: string }, string>('list-files')
