@@ -19,14 +19,14 @@ export class Queue<T> implements Runnable {
     else this.items.push(item)
   }
 
-  start() {
+  resume() {
     if (this.#running) return
     this.#running = true
     let item: T | undefined
     while (this.#running && (item = this.items.shift())) this.push(item)
   }
 
-  stop() {
+  pause() {
     this.#running = false
   }
 }

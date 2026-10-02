@@ -1,5 +1,5 @@
 export interface Runnable {
-  start(): void
-  stop(): void
+  resume(): void
+  pause(): void
   running: boolean
 }

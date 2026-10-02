@@ -1,46 +1,25 @@
-import { DiscriminatedQueue } from './DiscriminatedQueue.ts'
-import type { Runnable } from './Runnable.ts'
+import { Queue } from './Queue.ts'
 
-export class MethodQueue implements Runnable {
-  #queue = new DiscriminatedQueue<Record<symbol, QueuedCall>>({})
+export class MethodQueue extends Queue<() => any> {
+  constructor() {
+    super((fn) => fn())
+  }
 
   queueMethod<R, Args extends unknown[]>(
     method: (...args: Args) => R,
   ): (...args: Args) => Promise<Awaited<R>> {
-    const type = Symbol()
+    return (...args) => this.push(() => method(...args))
+  }
 
-    this.#queue = this.#queue.addExec(type, (item: QueuedCall<R, Args>) => {
+  override push<R>(fn: () => R): Promise<Awaited<R>> {
+    const { promise, resolve, reject } = Promise.withResolvers<Awaited<R>>()
+    super.push(() => {
       try {
-        item.resolve(method(...item.args) as Awaited<R>)
+        resolve(fn() as Awaited<R>)
       } catch (error) {
-        item.reject(error)
+        reject(error)
       }
-    }) as any
-
-    return (...args) => {
-      const { promise, resolve, reject } = Promise.withResolvers<Awaited<R>>()
-      this.#queue.push({ type, args, resolve, reject } as QueuedCall & {
-        type: symbol
-      })
-      return promise
-    }
+    })
+    return promise
   }
-
-  start() {
-    this.#queue.start()
-  }
-
-  stop() {
-    this.#queue.stop()
-  }
-
-  get running() {
-    return this.#queue.running
-  }
-}
-
-interface QueuedCall<R = unknown, Args extends unknown[] = unknown[]> {
-  args: Args
-  resolve: (value: Awaited<R>) => void
-  reject: (reason: unknown) => void
 }

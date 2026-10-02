@@ -30,7 +30,7 @@ export class DiscriminatedQueue<
   }
 }
 
-type DiscriminatedQueueItem<T extends Record<PropertyKey, unknown>> = {
+export type DiscriminatedQueueItem<T extends Record<PropertyKey, unknown>> = {
   [K in keyof T]: { type: K } & T[K]
 }[keyof T]
 
