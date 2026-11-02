@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.0.4](https://github.com/jg-wright/plugola/compare/store-logger-v3.0.3...store-logger-v3.0.4) (2026-11-02)
+
+
+### Bug Fixes
+
+* **store-logger:** match store subscription signature (context, action, param) ([325e52c](https://github.com/jg-wright/plugola/commit/325e52cfc2d9021487fbb5d252938cb7a120eb44))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/store bumped from 8.0.3 to 9.0.0
+  * peerDependencies
+    * @plugola/store bumped from ^8.0.3 to ^9.0.0
+
 ## [3.0.3](https://github.com/jg-wright/plugola/compare/store-logger-v3.0.2...store-logger-v3.0.3) (2026-06-08)
 
 

@@ -1,5 +1,30 @@
 # Changelog
 
+## [9.0.0](https://github.com/jg-wright/plugola/compare/store-v8.0.3...store-v9.0.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **store:** `context` is always the first fn parameter.
+* **store:** state -> context & listener -> subscriber
+
+### Bug Fixes
+
+* **store:** use queue resume/pause in place of start/stop ([c778ce9](https://github.com/jg-wright/plugola/commit/c778ce987e1e136be2379d8d7068d8fda8654a66))
+
+
+### Code Refactoring
+
+* **store:** can void action params ([8c28ead](https://github.com/jg-wright/plugola/commit/8c28ead624c9d9e703b30282256527348f117970))
+* **store:** use eip naming ([cec3913](https://github.com/jg-wright/plugola/commit/cec3913db79bc4952177c49d9a1a6aec2acb5267))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @plugola/queue bumped from ^0.0.0 to ^1.0.0
+
 ## [8.0.3](https://github.com/jg-wright/plugola/compare/store-v8.0.2...store-v8.0.3) (2026-06-08)
 
 

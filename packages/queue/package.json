@@ -1,6 +1,6 @@
 {
   "name": "@plugola/queue",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Runnable queues that buffer while stopped and drain on start",
   "type": "module",
   "exports": {

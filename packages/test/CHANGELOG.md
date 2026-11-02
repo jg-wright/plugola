@@ -1,5 +1,28 @@
 # Changelog
 
+## [3.0.0](https://github.com/jg-wright/plugola/compare/test-v2.0.4...test-v3.0.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **test:** new required property `plugin`
+
+### Features
+
+* **test:** ensure the plugin we're testing is part of the structure ([e52b27a](https://github.com/jg-wright/plugola/commit/e52b27a422ccbbaa34b1ebd0484bdb9f54c28e58))
+* **test:** pass the running promise to 'after' methods ([ce7f8bb](https://github.com/jg-wright/plugola/commit/ce7f8bb37231aeb29d46f8756ac0f57949fc9874))
+* **test:** pass the running promise to 'after' methods ([b972a74](https://github.com/jg-wright/plugola/commit/b972a7458b30c7545121fb5e9260d885ff8cd6d6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/message-bus bumped from ^7.1.0 to ^8.0.0
+    * @plugola/plugin-manager bumped from ^9.0.0 to ^9.0.1
+  * peerDependencies
+    * @plugola/plugin-manager bumped from ^9.0.0 to ^9.0.1
+
 ## [2.0.4](https://github.com/jg-wright/plugola/compare/test-v2.0.3...test-v2.0.4) (2026-06-08)
 
 
