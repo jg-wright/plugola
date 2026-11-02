@@ -38,12 +38,12 @@ testPlugin({
     'pluginContext is different for each plugin': [
       {
         run({ pluginName }) {
-          expect(pluginName).toBe('test')
+          expect(pluginName).toBe('test 0')
         },
       },
       {
         run({ pluginName }) {
-          expect(pluginName).toBe('test 2')
+          expect(pluginName).toBe('test 1')
         },
       },
     ],
