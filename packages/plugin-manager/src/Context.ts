@@ -1,3 +1,5 @@
+import type { Gate } from './Gate.js'
+
 /**
  * The base context passed to a plugin's {@link Plugin.run} hook.
  *
@@ -36,4 +38,26 @@ export interface EnableContext {
    * and dependency relationships affect what gets removed.
    */
   disablePlugins(pluginNames: string[], force?: boolean): number
+  /**
+   * Add a {@link Gate} that every plugin must pass before its hooks run. The
+   * gate is removed when this plugin is disabled. Returns a function that
+   * removes it sooner.
+   */
+  addGate(gate: Gate<any>): () => void
+  /**
+   * Whether the named plugin currently passes every gate.
+   */
+  checkGates(pluginName: string): Promise<boolean>
+}
+
+/**
+ * What the manager passes to its `add*Context` options alongside the plugin's
+ * name.
+ */
+export interface ContextOptions {
+  /**
+   * The plugin's signal, which aborts when it is disabled. Useful for tying
+   * the lifetime of injected resources to the plugin's.
+   */
+  signal: AbortSignal
 }

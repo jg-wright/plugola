@@ -1,5 +1,6 @@
-import { RunContext, EnableContext } from './Context.js'
+import { RunContext, EnableContext, ContextOptions } from './Context.js'
 import { Plugin } from './Plugin.js'
+import { Gate, GatePhase } from './Gate.js'
 import { race, timeout } from '@johngw/async'
 import DependencyGraph from './DependencyGraph.js'
 
@@ -17,27 +18,42 @@ import DependencyGraph from './DependencyGraph.js'
  * only (from {@link addEnableContext}).
  * @typeParam ExtraRunContext - Extra fields merged into the run context only
  * (from {@link addRunContext}).
+ * @typeParam PluginMeta - Extra fields every registered plugin may carry, which
+ * {@link Gate}s can read.
  */
 export interface PluginManagerOptions<
   ExtraContext extends Record<string, unknown>,
   ExtraEnableContext extends Record<string, unknown>,
   ExtraRunContext extends Record<string, unknown>,
+  PluginMeta extends object = {},
 > {
   /**
    * Returns extra fields merged into every plugin context — both `enable` and
-   * `run`. Called once per hook invocation with the plugin's name.
+   * `run`. Called once per hook invocation with the plugin's name and signal.
    */
-  addContext?(pluginName: string): ExtraContext
+  addContext?(pluginName: string, options: ContextOptions): ExtraContext
   /**
    * Returns extra fields merged into the `enable` context only. Called with the
-   * plugin's name when its `enable` hook is invoked.
+   * plugin's name and signal when its `enable` hook is invoked.
    */
-  addEnableContext?(pluginName: string): ExtraEnableContext
+  addEnableContext?(
+    pluginName: string,
+    options: ContextOptions,
+  ): ExtraEnableContext
   /**
    * Returns extra fields merged into the `run` context only. Called with the
-   * plugin's name when its `run` hook is invoked.
+   * plugin's name and signal when its `run` hook is invoked.
    */
-  addRunContext?(pluginName: string): ExtraRunContext
+  addRunContext?(pluginName: string, options: ContextOptions): ExtraRunContext
+  /**
+   * {@link Gate}s every plugin must pass before its hooks run. More can be
+   * added with {@link PluginManager.addGate}.
+   */
+  gates?: Gate<Plugin<any, any> & PluginMeta>[]
+  /**
+   * Called when a {@link Gate} refuses a plugin.
+   */
+  onPluginGated?(plugin: Plugin<any, any> & PluginMeta, phase: GatePhase): void
   /**
    * Default milliseconds to wait for a plugin's `enable` or `run` hook before
    * aborting it. When a hook times out the plugin is disabled and its `signal`
@@ -88,13 +104,17 @@ export interface PluginManagerOptions<
  * `addEnableContext` option.
  * @typeParam ExtraRunContext - Extra context injected into `run`, from the
  * `addRunContext` option.
+ * @typeParam PluginMeta - Extra fields every registered plugin may carry, which
+ * {@link Gate}s can read.
  */
 export default class PluginManager<
   ExtraContext extends Record<string, unknown>,
   ExtraEnableContext extends Record<string, unknown>,
   ExtraRunContext extends Record<string, unknown>,
+  PluginMeta extends object = {},
 > {
   #plugins: Record<string, Plugin> = {}
+  #gates: Set<Gate<any>>
   #dependencyGraph = new DependencyGraph<Plugin>()
   #pendingDependencies = new Map<
     string,
@@ -107,7 +127,8 @@ export default class PluginManager<
   #options: PluginManagerOptions<
     ExtraContext,
     ExtraEnableContext,
-    ExtraRunContext
+    ExtraRunContext,
+    PluginMeta
   >
 
   /**
@@ -118,10 +139,55 @@ export default class PluginManager<
     options: PluginManagerOptions<
       ExtraContext,
       ExtraEnableContext,
-      ExtraRunContext
+      ExtraRunContext,
+      PluginMeta
     > = {},
   ) {
     this.#options = options
+    this.#gates = new Set(options.gates)
+  }
+
+  /**
+   * Add a {@link Gate} that every plugin must pass before its `enable` and
+   * `run` hooks are called.
+   *
+   * @returns A function that removes the gate.
+   */
+  addGate(gate: Gate<ManagedPlugin<PluginMeta>>) {
+    this.#gates.add(gate)
+    return () => {
+      this.#gates.delete(gate)
+    }
+  }
+
+  /**
+   * Whether the named plugin currently passes every gate.
+   *
+   * @param pluginName - The plugin to check.
+   * @param phase - The phase the gates are told the check is for.
+   */
+  async checkGates(pluginName: string, phase: GatePhase = 'enable') {
+    return this.#passesGates(this.#getPlugin(pluginName), phase)
+  }
+
+  /**
+   * Re-evaluate every gate against the enabled plugins, disabling (along with
+   * their dependers) the ones that no longer pass — for example after a user
+   * withdraws consent.
+   *
+   * @returns The names of the plugins that no longer pass.
+   */
+  async recheckGates() {
+    const refused: string[] = []
+    await Promise.all(
+      this.enabledPlugins.map(async (pluginName) => {
+        const plugin = this.#plugins[pluginName]!
+        if (await this.#passesGates(plugin, 'enable')) return
+        refused.push(pluginName)
+        this.#disablePlugin(plugin, true)
+      }),
+    )
+    return refused
   }
 
   /** Names of the currently enabled plugins, as a new array. */
@@ -151,25 +217,32 @@ export default class PluginManager<
     options: PluginManagerOptions<
       ExtraContext,
       ExtraEnableContext,
-      ExtraRunContext
+      ExtraRunContext,
+      PluginMeta
     >,
   ) {
-    const pluginManager = new PluginManager({
+    const pluginManager = new PluginManager<
+      ExtraContext,
+      ExtraEnableContext,
+      ExtraRunContext,
+      PluginMeta
+    >({
       ...options,
-      addContext: (pluginName) =>
+      gates: [...this.#gates, ...(options.gates ?? [])],
+      addContext: (pluginName, contextOptions) =>
         ({
-          ...this.#options.addContext?.(pluginName),
-          ...options.addContext?.(pluginName),
+          ...this.#options.addContext?.(pluginName, contextOptions),
+          ...options.addContext?.(pluginName, contextOptions),
         }) as ExtraContext,
-      addEnableContext: (pluginName) =>
+      addEnableContext: (pluginName, contextOptions) =>
         ({
-          ...this.#options.addEnableContext?.(pluginName),
-          ...options.addEnableContext?.(pluginName),
+          ...this.#options.addEnableContext?.(pluginName, contextOptions),
+          ...options.addEnableContext?.(pluginName, contextOptions),
         }) as ExtraEnableContext,
-      addRunContext: (pluginName) =>
+      addRunContext: (pluginName, contextOptions) =>
         ({
-          ...this.#options.addRunContext?.(pluginName),
-          ...options.addRunContext?.(pluginName),
+          ...this.#options.addRunContext?.(pluginName, contextOptions),
+          ...options.addRunContext?.(pluginName, contextOptions),
         }) as ExtraRunContext,
     })
     pluginManager.#plugins = this.#plugins
@@ -189,7 +262,8 @@ export default class PluginManager<
     plugin: Plugin<
       EnableContext & ExtraContext & ExtraEnableContext,
       RunContext & ExtraContext & ExtraRunContext
-    >,
+    > &
+      PluginMeta,
   ): void
 
   /**
@@ -207,7 +281,8 @@ export default class PluginManager<
       Plugin<
         EnableContext & ExtraContext & ExtraEnableContext,
         RunContext & ExtraContext & ExtraRunContext
-      >,
+      > &
+        PluginMeta,
       'name'
     >,
   ): void
@@ -215,15 +290,17 @@ export default class PluginManager<
   registerPlugin(
     nameOrPlugin:
       | string
-      | Plugin<
+      | (Plugin<
           EnableContext & ExtraContext & ExtraEnableContext,
           RunContext & ExtraContext & ExtraRunContext
-        >,
+        > &
+          PluginMeta),
     plugin?: Omit<
       Plugin<
         EnableContext & ExtraContext & ExtraEnableContext,
         RunContext & ExtraContext & ExtraRunContext
-      >,
+      > &
+        PluginMeta,
       'name'
     >,
   ) {
@@ -503,6 +580,14 @@ export default class PluginManager<
       )
     if (dependencyPromises.length) await Promise.all(dependencyPromises)
 
+    if (!this.#dependenciesEnabled(plugin)) return this.#rollBack(plugin)
+
+    if (this.#gates.size && !(await this.#passesGates(plugin, 'enable')))
+      return this.#rollBack(plugin)
+
+    // It may have been disabled while waiting on its dependencies or gates.
+    if (!this.#enabledPlugins.has(plugin.name)) return
+
     if (!plugin.enable) return
 
     const { signal } = this.#abortController(plugin)
@@ -517,10 +602,33 @@ export default class PluginManager<
     } catch (error) {
       // Isolate the failure: roll the plugin back so it isn't left marked as
       // enabled, report it, and let sibling plugins carry on.
-      this.#enabledPlugins.delete(plugin.name)
-      this.#abortControllers.get(plugin)?.abort()
+      this.#rollBack(plugin)
       this.#reportPluginError(error, plugin, 'enable')
     }
+  }
+
+  #rollBack(plugin: Plugin) {
+    this.#enabledPlugins.delete(plugin.name)
+    this.#abortControllers.get(plugin)?.abort()
+  }
+
+  #dependenciesEnabled(plugin: Plugin) {
+    for (const dependency of this.#dependencyGraph.dependencies(plugin))
+      if (!this.#enabledPlugins.has(dependency.name)) return false
+    return true
+  }
+
+  async #passesGates(plugin: Plugin, phase: GatePhase) {
+    try {
+      const results = await Promise.all(
+        Array.from(this.#gates, (gate) => gate(plugin, phase)),
+      )
+      if (results.every(Boolean)) return true
+    } catch (error) {
+      this.#reportPluginError(error, plugin, phase)
+    }
+    this.#options.onPluginGated?.(plugin as ManagedPlugin<PluginMeta>, phase)
+    return false
   }
 
   async #runPlugin(plugin: Plugin, path: Set<Plugin> = new Set()) {
@@ -535,6 +643,19 @@ export default class PluginManager<
     await this.#runDependencies(plugin, nextPath)
 
     if (this.#ran.has(plugin) || !plugin.run) return
+
+    // A dependency may have been refused by a gate, or this plugin disabled,
+    // while its dependencies ran.
+    if (
+      !this.#enabledPlugins.has(plugin.name) ||
+      !this.#dependenciesEnabled(plugin)
+    )
+      return
+
+    if (this.#gates.size && !(await this.#passesGates(plugin, 'run'))) {
+      this.#disablePlugin(plugin, true)
+      return
+    }
 
     const { signal } = this.#abortController(plugin)
     if (signal.aborted) return
@@ -593,8 +714,17 @@ export default class PluginManager<
     return {
       enablePlugins: this.enablePlugins,
       disablePlugins: this.disablePlugins,
+      addGate: (gate: Gate<any>) => {
+        const removeGate = this.addGate(gate)
+        signal.addEventListener('abort', removeGate, { once: true })
+        return () => {
+          signal.removeEventListener('abort', removeGate)
+          removeGate()
+        }
+      },
+      checkGates: (pluginName: string) => this.checkGates(pluginName),
       ...this.#createContext(plugin, signal),
-      ...(this.#options.addEnableContext?.(plugin.name) || {}),
+      ...(this.#options.addEnableContext?.(plugin.name, { signal }) || {}),
     }
   }
 
@@ -604,14 +734,16 @@ export default class PluginManager<
   ): Record<string, unknown> {
     return {
       ...this.#createContext(plugin, signal),
-      ...(this.#options.addRunContext?.(plugin.name) || {}),
+      ...(this.#options.addRunContext?.(plugin.name, { signal }) || {}),
     }
   }
 
   #createContext({ name }: Plugin, signal: AbortSignal) {
     return {
       signal,
-      ...(this.#options.addContext?.(name) || {}),
+      ...(this.#options.addContext?.(name, { signal }) || {}),
     }
   }
 }
+
+type ManagedPlugin<PluginMeta extends object> = Plugin<any, any> & PluginMeta
