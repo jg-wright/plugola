@@ -1,9 +1,10 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "lib": ["ESNext"],
     "outDir": "dist",
     "rootDir": "./src"
   },
   "include": ["src"],
-  "references": [{ "path": "../invoke" }, { "path": "../plugin-manager" }]
+  "references": [{ "path": "../message-bus" }, { "path": "../plugin-manager" }]
 }

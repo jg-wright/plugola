@@ -3,54 +3,58 @@ import { BaseActions, Store } from '../src/Store.js'
 
 interface Actions extends BaseActions {
   foo: string
-  bar: null
+  bar: void
 }
 
-interface State {
+interface Context {
   foo: string
 }
 
-let store: Store<Actions, State>
+let store: Store<Actions, Context>
 
 beforeEach(() => {
-  store = new Store<Actions, State>({
+  store = new Store<Actions, Context>({
     __init__: () => ({ foo: '' }),
-    foo: (foo, state) => ({ ...state, foo }),
-    bar: (_, state) => (state.foo === 'bar' ? state : { ...state, foo: 'bar' }),
+    foo: (context, foo) => ({ ...context, foo }),
+    bar: (context) =>
+      context.foo === 'bar' ? context : { ...context, foo: 'bar' },
   })
 })
 
-test('state management', () => {
-  expect(store.state).toEqual({ foo: '' })
-  store.dispatch('bar', null)
+test('context management', () => {
+  store.resume()
+  expect(store.context).toEqual({ foo: '' })
+  store.dispatch('bar')
   // @ts-expect-error
   store.dispatch('bar', 'error')
-  expect(store.state).toEqual({ foo: 'bar' })
+  expect(store.context).toEqual({ foo: 'bar' })
   store.dispatch('foo', 'mung')
-  expect(store.state).toEqual({ foo: 'mung' })
+  expect(store.context).toEqual({ foo: 'mung' })
 })
 
-test('subscribing to state changes', () => {
+test('subscribing to context changes', () => {
   const onUpdate = vi.fn()
   store.subscribe(onUpdate)
-  store.dispatch('bar', null)
-  expect(onUpdate).toHaveBeenCalledWith('bar', null, { foo: 'bar' })
+  store.dispatch('bar')
+  store.resume()
+  expect(onUpdate).toHaveBeenCalledWith({ foo: 'bar' }, 'bar')
 })
 
 test('stale subscribers', () => {
   const subscriber = vi.fn()
   store.subscribeToStaleEvents(subscriber)
-  store.dispatch('bar', null)
+  store.dispatch('bar')
+  store.resume()
   expect(subscriber).not.toHaveBeenCalled()
-  store.dispatch('bar', null)
-  expect(subscriber).toHaveBeenCalledWith('bar', null, { foo: 'bar' })
+  store.dispatch('bar')
+  expect(subscriber).toHaveBeenCalledWith({ foo: 'bar' }, 'bar')
 })
 
 test('action listeners', () => {
   const subscriber = vi.fn()
   store.on('bar', subscriber)
-  store.dispatch('bar', null)
-  store.dispatch('bar', null)
+  store.dispatch('bar')
+  store.resume()
   expect(subscriber).toHaveBeenCalledTimes(1)
-  expect(subscriber).toHaveBeenCalledWith(null, { foo: 'bar' })
+  expect(subscriber).toHaveBeenCalledWith({ foo: 'bar' })
 })

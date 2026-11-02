@@ -21,7 +21,7 @@
   },
   "homepage": "https://github.com/jg-wright/plugola#readme",
   "devDependencies": {
-    "@plugola/invoke": "^2.0.3",
+    "@plugola/message-bus": "^7.1.0",
     "@plugola/plugin-manager": "^9.0.0",
     "@types/node": "25.9.2",
     "@vitest/runner": "4.1.8",

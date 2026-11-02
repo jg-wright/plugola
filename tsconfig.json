@@ -27,6 +27,7 @@
     { "path": "packages/message-bus" },
     { "path": "packages/plugin-manager" },
     { "path": "packages/query-params" },
+    { "path": "packages/queue" },
     { "path": "packages/store" },
     { "path": "packages/store-logger" },
     { "path": "packages/streams" },
