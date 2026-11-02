@@ -4,6 +4,7 @@ import type {
   CommandMessageFactory,
 } from '../Message/CommandMessage.ts'
 import { CANCEL } from '../Roles/Interceptor.ts'
+import { chain } from '../lang/chain.ts'
 import type {
   ResponderContext,
   ResponderErrorHandler,
@@ -40,9 +41,13 @@ export class MessageDispatcher {
     })
   }
 
-  async runInterceptors<E extends MessageFactory | CommandMessageFactory>(
+  /**
+   * Runs the participant's interceptors for the message in turn. Synchronous
+   * when they all return synchronously.
+   */
+  runInterceptors<E extends MessageFactory | CommandMessageFactory>(
     message: MessageOf<E>,
-  ): Promise<MessageOf<E> | typeof CANCEL> {
+  ): MessageOf<E> | typeof CANCEL | Promise<MessageOf<E> | typeof CANCEL> {
     if (!this.#participant.queue.running) return message
 
     const interceptors = this.#participant.registry.interceptorsFor(
@@ -51,13 +56,9 @@ export class MessageDispatcher {
 
     if (!interceptors?.size) return message
 
-    for (const interceptor of interceptors) {
-      const result = await interceptor.perform(message)
-      if (result === CANCEL) return CANCEL
-      else if (result) message = result as MessageOf<E>
-    }
-
-    return message
+    return chain([...interceptors], message, (interceptor, message) =>
+      interceptor.perform(message),
+    )
   }
 
   /**

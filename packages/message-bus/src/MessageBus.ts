@@ -10,6 +10,7 @@ import type {
   ResponderErrorHandler,
 } from './Roles/Responder.ts'
 import { getOrInsert } from './lang/Map.ts'
+import { chain, isPromiseLike } from './lang/chain.ts'
 import type { Runnable } from '@plugola/queue'
 import { type Dispatcher, dispatchImmediately } from './Roles/Dispatcher.ts'
 
@@ -156,15 +157,17 @@ export class MessageBus implements Runnable {
    * @internal
    */
   async emit<M extends Message>(message: M): Promise<M | typeof CANCEL> {
-    const interceptorNames = this.#interceptorRoutes.get(message.$factory) ?? []
+    const interceptorNames = [
+      ...(this.#interceptorRoutes.get(message.$factory) ?? []),
+    ]
 
-    for (const name of interceptorNames) {
-      const result = await this.#participants
-        .get(name)
-        ?.dispatcher.runInterceptors(message)
-      if (result === CANCEL) return CANCEL
-      else if (result) message = result as M
-    }
+    // Interceptors that return synchronously keep delivery synchronous.
+    const intercepted = chain(interceptorNames, message, (name, message) =>
+      this.#participants.get(name)?.dispatcher.runInterceptors(message),
+    )
+    const result = isPromiseLike(intercepted) ? await intercepted : intercepted
+    if (result === CANCEL) return CANCEL
+    message = result
 
     const subscriberNames = this.#subscriberRoutes.get(message.$factory)
     if (!subscriberNames?.size) return message
