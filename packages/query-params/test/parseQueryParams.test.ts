@@ -123,3 +123,10 @@ test('set receives how each value was derived', () => {
     ['i', { operation: 'json' }],
   ])
 })
+
+test('a malformed parameter is skipped without losing the others', () => {
+  expect(parseQueryParams('foo=bar&bad{}={nope&mung=face')).toEqual({
+    foo: 'bar',
+    mung: 'face',
+  })
+})

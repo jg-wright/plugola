@@ -47,68 +47,73 @@ export default function parseQueryParams(
   searchString = searchString.replace(/^\?/, '')
   if (!searchString) return into
 
-  try {
-    return searchString
-      .split('&')
-      .reduce<QueryParams>((queryParams, searchParam) => {
-        let [key, value] = splitOnce(searchParam, '=')
+  return searchString
+    .split('&')
+    .reduce<QueryParams>((queryParams, searchParam) => {
+      // A malformed parameter is skipped rather than losing the others.
+      try {
+        return parseQueryParam(queryParams, searchParam, set)
+      } catch (error) {
+        console.error('Unable to parse query parameter', searchParam, error)
+        return queryParams
+      }
+    }, into)
+}
 
-        key = decodeURIComponent(key)
+function parseQueryParam(
+  queryParams: QueryParams,
+  searchParam: string,
+  set: NonNullable<Options['set']>,
+) {
+  let [key, value] = splitOnce(searchParam, '=')
 
-        if (key.startsWith('!'))
-          return set(queryParams, key.slice(1), false, { operation: 'false' })
-        else if (value === undefined)
-          return set(queryParams, key, true, { operation: 'true' })
-        else if (key.endsWith('[]')) {
-          const items = toArray(value)
-          return set(queryParams, withoutEnd(key, 2), items, {
-            operation: 'array',
-            items,
-          })
-        } else if (key.endsWith('[^]')) {
-          key = withoutEnd(key, 3)
-          const items = toItems(value)
-          return set(
-            queryParams,
-            key,
-            [...items, ...asArray(queryParams[key])],
-            { operation: 'prepend', items },
-          )
-        } else if (key.endsWith('[+]')) {
-          key = withoutEnd(key, 3)
-          const items = toItems(value)
-          return set(
-            queryParams,
-            key,
-            [...asArray(queryParams[key]), ...items],
-            { operation: 'append', items },
-          )
-        } else if (key.endsWith('[-]')) {
-          key = withoutEnd(key, 3)
-          const items = toItems(value)
-          return set(
-            queryParams,
-            key,
-            removeFromArray(items, asArray(queryParams[key])),
-            { operation: 'remove', items },
-          )
-        } else if (key.endsWith('{x}'))
-          return set(queryParams, withoutEnd(key, 3), toFlags(value), {
-            operation: 'flags',
-          })
-        else if (key.endsWith('{}'))
-          return set(queryParams, withoutEnd(key, 2), fromJSON(value), {
-            operation: 'json',
-          })
-        else
-          return set(queryParams, key, decodeURIComponent(value), {
-            operation: 'set',
-          })
-      }, into)
-  } catch (error) {
-    console.error('ads', error)
-    return into
-  }
+  key = decodeURIComponent(key)
+
+  if (key.startsWith('!'))
+    return set(queryParams, key.slice(1), false, { operation: 'false' })
+  else if (value === undefined)
+    return set(queryParams, key, true, { operation: 'true' })
+  else if (key.endsWith('[]')) {
+    const items = toArray(value)
+    return set(queryParams, withoutEnd(key, 2), items, {
+      operation: 'array',
+      items,
+    })
+  } else if (key.endsWith('[^]')) {
+    key = withoutEnd(key, 3)
+    const items = toItems(value)
+    return set(queryParams, key, [...items, ...asArray(queryParams[key])], {
+      operation: 'prepend',
+      items,
+    })
+  } else if (key.endsWith('[+]')) {
+    key = withoutEnd(key, 3)
+    const items = toItems(value)
+    return set(queryParams, key, [...asArray(queryParams[key]), ...items], {
+      operation: 'append',
+      items,
+    })
+  } else if (key.endsWith('[-]')) {
+    key = withoutEnd(key, 3)
+    const items = toItems(value)
+    return set(
+      queryParams,
+      key,
+      removeFromArray(items, asArray(queryParams[key])),
+      { operation: 'remove', items },
+    )
+  } else if (key.endsWith('{x}'))
+    return set(queryParams, withoutEnd(key, 3), toFlags(value), {
+      operation: 'flags',
+    })
+  else if (key.endsWith('{}'))
+    return set(queryParams, withoutEnd(key, 2), fromJSON(value), {
+      operation: 'json',
+    })
+  else
+    return set(queryParams, key, decodeURIComponent(value), {
+      operation: 'set',
+    })
 }
 
 function toArray(value: string) {
