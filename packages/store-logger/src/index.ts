@@ -4,16 +4,16 @@ import type Logger from '@plugola/logger/Logger'
 export default function storeLogger(
   store: Store<any, any>,
   logger: Logger,
-  label = 'store'
+  label = 'store',
 ) {
   const storeLogger = logger.extend(label)
 
-  const unsubscribe = store.subscribe((action, param, state) => {
-    storeLogger.info(action, param, state)
+  const unsubscribe = store.subscribe((state, ...args) => {
+    storeLogger.info(...args, state)
   })
 
-  const staleUnsubscribe = store.subscribeToStaleEvents((action, param) => {
-    storeLogger.info(action, param, 'NO_CHANGE')
+  const staleUnsubscribe = store.subscribeToStaleEvents((_state, ...args) => {
+    storeLogger.info(...args, 'NO_CHANGE')
   })
 
   return () => {

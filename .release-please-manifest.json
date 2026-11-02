@@ -5,6 +5,7 @@
   "packages/message-bus": "7.1.0",
   "packages/plugin-manager": "9.0.0",
   "packages/query-params": "3.0.4",
+  "packages/queue": "0.0.0",
   "packages/store": "8.0.3",
   "packages/store-logger": "3.0.3",
   "packages/streams": "2.0.3",
