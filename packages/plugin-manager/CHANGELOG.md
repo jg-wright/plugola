@@ -1,5 +1,18 @@
 # Changelog
 
+## [9.0.1](https://github.com/jg-wright/plugola/compare/plugin-manager-v9.0.0...plugin-manager-v9.0.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **plugin-manager:** allow registering a plugin before its dependencies ([d25be39](https://github.com/jg-wright/plugola/commit/d25be39951cba8cf1c52ef3ba4eb442f8f4a73cb))
+* **plugin-manager:** consistent, configurable handling of unknown plugins ([0a49822](https://github.com/jg-wright/plugola/commit/0a49822c67e5bc33c2938bb97e5867a2634d2489))
+* **plugin-manager:** detect circular dependencies when running ([8b9476a](https://github.com/jg-wright/plugola/commit/8b9476abdc3f6f2d28d700e23604d78be0cd76b7))
+* **plugin-manager:** give withOptions clones isolated runtime state ([94d5de2](https://github.com/jg-wright/plugola/commit/94d5de208738dd39e19169e882bda1f2f84c86c2))
+* **plugin-manager:** isolate and report plugin enable/run errors ([c6e15b2](https://github.com/jg-wright/plugola/commit/c6e15b2e929bdd260beebced2737c7edcd41c235))
+* **plugin-manager:** make enable batches local instead of a shared field ([46192da](https://github.com/jg-wright/plugola/commit/46192daaf9fe2d907ce42ab538b23cc50f04b550))
+* **plugin-manager:** order run() after enabled optional dependencies ([2e1aeb3](https://github.com/jg-wright/plugola/commit/2e1aeb39a9ad1e7fac68a97992eeeb86b09cf123))
+
 ## [9.0.0](https://github.com/jg-wright/plugola/compare/plugin-manager-v8.0.3...plugin-manager-v9.0.0) (2026-06-08)
 
 

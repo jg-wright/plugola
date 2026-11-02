@@ -2,13 +2,13 @@
   "packages/graph": "3.0.3",
   "packages/invoke": "2.0.3",
   "packages/logger": "5.0.3",
-  "packages/message-bus": "7.1.0",
-  "packages/plugin-manager": "9.0.0",
-  "packages/query-params": "3.0.4",
-  "packages/queue": "0.0.0",
-  "packages/store": "8.0.3",
-  "packages/store-logger": "3.0.3",
+  "packages/message-bus": "8.0.0",
+  "packages/plugin-manager": "9.0.1",
+  "packages/query-params": "4.0.0",
+  "packages/queue": "1.0.0",
+  "packages/store": "9.0.0",
+  "packages/store-logger": "3.0.4",
   "packages/streams": "2.0.3",
-  "packages/test": "2.0.4",
-  "packages/vendor-plugin-manager": "4.0.4"
+  "packages/test": "3.0.0",
+  "packages/vendor-plugin-manager": "4.0.5"
 }

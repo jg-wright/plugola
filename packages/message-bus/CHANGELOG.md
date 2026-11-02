@@ -1,5 +1,46 @@
 # Changelog
 
+## [8.0.0](https://github.com/jg-wright/plugola/compare/message-bus-v7.1.0...message-bus-v8.0.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **message-bus:** rename around Enterprise Integration Patterns
+* **message-bus:** the entire public API of @plugola/message-bus has changed.
+
+### Features
+
+* **dmg-bus:** interception ([51521ef](https://github.com/jg-wright/plugola/commit/51521efaa1ec97cf98f0d502e233a6808bf25ff8))
+* **message-bus:** add resumeuntil ([31c303e](https://github.com/jg-wright/plugola/commit/31c303e34650ea5a62e9fdae8d9a8964e15964a7))
+* **message-bus:** allow messages and commands without a payload ([4b87f1d](https://github.com/jg-wright/plugola/commit/4b87f1d150a443292dbebfe2dde25896638f3d87))
+* **message-bus:** bridge buses across transports (Messaging Bridge) ([66c4be7](https://github.com/jg-wright/plugola/commit/66c4be7117a9b8ff49251fc3e5581615737fc430))
+* **message-bus:** enforce serializable message payloads ([9d19a79](https://github.com/jg-wright/plugola/commit/9d19a79adb8bb7b752a3f2e95c5bb4a108fb3f1a))
+* **message-bus:** externally abortable brokers ([344cc71](https://github.com/jg-wright/plugola/commit/344cc71eb657911471ea26df10499ea1a6f9b214))
+* **message-bus:** include a portchannel ([20ef604](https://github.com/jg-wright/plugola/commit/20ef604e6c0d2d40aeb24b8766e6cf27fe3e92c0))
+* **message-bus:** rewrite around class-based events and per-broker queues ([f4ff39f](https://github.com/jg-wright/plugola/commit/f4ff39f24d38061bc2c35273d1546d82a527a75b))
+* **message-bus:** strictly typed registries ([668c080](https://github.com/jg-wright/plugola/commit/668c0809d0a9347dc972a72032f51b35c3f8ece5))
+* **message0bus:** invoke.first ([f52f9cf](https://github.com/jg-wright/plugola/commit/f52f9cf82645f11a5f5fffbf46c680e11734e62c))
+* starting a new bus structure ([26bd49b](https://github.com/jg-wright/plugola/commit/26bd49b8c4751c49b62c020fea9d4ccdb2b51eeb))
+
+
+### Bug Fixes
+
+* correct import location ([d984131](https://github.com/jg-wright/plugola/commit/d98413118435cea49363bba4ee85985d60980929))
+* **message-bus:** auto resume partipants ([b872449](https://github.com/jg-wright/plugola/commit/b8724493924d4238c32bc3d736ebf09ead5924ea))
+* **message-bus:** import Runnable as a type ([0693a75](https://github.com/jg-wright/plugola/commit/0693a759d81b63ee466ee241d2d032caa696383f))
+
+
+### Code Refactoring
+
+* **message-bus:** rename around Enterprise Integration Patterns ([afe80cd](https://github.com/jg-wright/plugola/commit/afe80cdfc5399a6d16c5f4b572fc3b3251e04073))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @plugola/queue bumped from ^0.0.0 to ^1.0.0
+
 ## [7.1.0](https://github.com/jg-wright/plugola/compare/message-bus-v7.0.0...message-bus-v7.1.0) (2026-06-10)
 
 

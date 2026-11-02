@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.0.0](https://github.com/jg-wright/plugola/compare/query-params-v3.0.4...query-params-v4.0.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **query-params:** `amendKey` and `filter` have been removed in favour of `set`.
+
+### Code Refactoring
+
+* **query-params:** simplify api ([49f2118](https://github.com/jg-wright/plugola/commit/49f211869478fc3d22259ffce55f98b05a90af5f))
+
 ## [3.0.4](https://github.com/jg-wright/plugola/compare/query-params-v3.0.3...query-params-v3.0.4) (2026-06-09)
 
 
