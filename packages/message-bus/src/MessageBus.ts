@@ -11,6 +11,7 @@ import type {
 } from './Roles/Responder.ts'
 import { getOrInsert } from './lang/Map.ts'
 import type { Runnable } from '@plugola/queue'
+import { type Dispatcher, dispatchImmediately } from './Roles/Dispatcher.ts'
 
 /**
  * The message bus: the shared hub the host owns. It hands out a
@@ -33,6 +34,18 @@ import type { Runnable } from '@plugola/queue'
  * ```
  */
 export class MessageBus implements Runnable {
+  /**
+   * Schedules each delivery of a message to a subscriber. Swappable at runtime;
+   * defaults to delivering immediately.
+   */
+  dispatcher: Dispatcher
+
+  constructor({
+    dispatcher = dispatchImmediately,
+  }: { dispatcher?: Dispatcher } = {}) {
+    this.dispatcher = dispatcher
+  }
+
   #running = false
   get running() {
     return this.#running

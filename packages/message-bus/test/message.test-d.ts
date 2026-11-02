@@ -58,18 +58,14 @@ export async function assertResponseType(gateway: MessageGateway) {
   expectTypeOf(files).toEqualTypeOf<string[]>()
 }
 
-// --- serializability is gated at the bus, not at construction ---------------
+// --- local payloads may hold live references ---------------------------------
 
 const Occurred = message<{ at: Date }>('occurred')
 const RenderInto = command<{ target: Widget }, void>('render-into')
 
-export function assertSerializablePayloads(gateway: MessageGateway) {
+export function assertLivePayloads(gateway: MessageGateway) {
   gateway.emit(Clicked({ x: 1, y: 2 }))
-
-  // @ts-expect-error a Date is not JSON-serializable
   gateway.emit(Occurred({ at: new Date() }))
-
-  // @ts-expect-error the Widget payload is not serializable
   gateway.invoke(RenderInto({ target: new Widget('root') }))
 }
 

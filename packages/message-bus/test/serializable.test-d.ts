@@ -1,4 +1,5 @@
-// Type-level tests for the Serializable payload constraint. These are checked
+// Type-level tests for the Serializable payload constraint, which applies to
+// messages registered on a TransportableMessageRegistry. These are checked
 // with `tsc` (see the `test:types` script and tsconfig.test.json), not run:
 // vitest's `test`-glob excludes `*.test-d.ts`, and the exported `assert*`
 // functions below exist only so the compiler checks their bodies.
@@ -8,6 +9,7 @@ import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 import { message } from '../src/Message/Message.ts'
 import { command } from '../src/Message/CommandMessage.ts'
 import type { Serializable } from '../src/Message/Serializable.ts'
+import { TransportableMessageRegistry } from '../src/MessageRegistry/TransportableMessageRegistry.ts'
 
 // --- fixtures --------------------------------------------------------------
 
@@ -61,7 +63,7 @@ expectTypeOf<Serializable<symbol>>().not.toEqualTypeOf<symbol>()
 expectTypeOf<Serializable<bigint>>().not.toEqualTypeOf<bigint>()
 expectTypeOf<Serializable<Widget>>().not.toEqualTypeOf<Widget>()
 
-// --- emit only accepts a serializable payload ------------------------------
+// --- local emit/invoke accept live references -------------------------------
 
 export function assertEmit(gateway: MessageGateway) {
   gateway.emit(
@@ -71,23 +73,40 @@ export function assertEmit(gateway: MessageGateway) {
       meta: { seen: true, count: 1 },
     }),
   )
-
-  // @ts-expect-error a Widget instance carries methods, so it is not serializable
   gateway.emit(Clicked({ target: new Widget('root') }))
-
-  // @ts-expect-error a function will not survive queuing
   gateway.emit(WithCallback({ cb: () => {} }))
-
-  // @ts-expect-error the nested Date is not JSON-serializable
   gateway.emit(WithNested({ payload: { at: new Date() } }))
 }
 
-// --- invoke only accepts a serializable command payload --------------------
-
 export function assertInvoke(gateway: MessageGateway) {
-  // The command's DOM-shaped *response* is exempt; only its payload is checked.
   gateway.invoke(GetWidget({ id: 'root' }))
-
-  // @ts-expect-error the Widget payload is not serializable
   gateway.invoke(RenderInto({ target: new Widget('x') }))
+}
+
+// --- transportable messages must be serializable -----------------------------
+
+export function assertTransportable() {
+  TransportableMessageRegistry.create()
+    .message('user-logged-in')
+    .as<{ userId: string; roles: string[] }>()
+    .command('get-widget')
+    .as<{ id: string }, Widget>()
+
+  // @ts-expect-error the default codec puts the Widget on the wire
+  TransportableMessageRegistry.create()
+    .message('clicked')
+    .as<{ target: Widget }>()
+
+  TransportableMessageRegistry.create()
+    .command('render-into')
+    // @ts-expect-error the default codec puts the Widget on the wire
+    .as<{ target: Widget }, void>()
+
+  // A full codec decides what crosses the wire, so the payload may hold anything.
+  TransportableMessageRegistry.create()
+    .message('clicked')
+    .as<{ target: Widget }>({
+      encode: ({ target }) => ({ id: target.id }),
+      decode: ({ id }) => Clicked({ target: new Widget(id) }),
+    })
 }

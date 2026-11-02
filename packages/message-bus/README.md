@@ -97,23 +97,42 @@ gateway.emit(Greeting({ text: 'hi' }))
 bus.resume()
 ```
 
-## Serializable payloads
+## Payloads
 
-Because a message can sit in a paused queue and be delivered later — and can
-cross a bridge — its payload must be JSON-safe: strings, numbers, booleans,
-`null`, and arrays/plain objects of those. This is a **compile-time** rule on
-`emit` and `invoke` arguments; nothing is validated or cloned in-process. Keys
-prefixed with `$` (framework metadata like `$name`) are exempt.
+In-process, a message is delivered by reference, so its payload may hold
+anything — DOM nodes, callbacks, class instances. Bear in mind that a subscriber
+on a paused participant receives the message later, by which time a referenced
+object may have changed.
+
+Messages that cross a bridge are different: see
+[Transports](#transports-bridging-buses). A message registered on a
+`TransportableMessageRegistry` with the default codec must have a JSON-safe
+payload (strings, numbers, booleans, `null`, and arrays/plain objects of those).
+This is a **compile-time** rule; keys prefixed with `$` (framework metadata like
+`$name`) are exempt. A payload that isn't JSON-safe needs a full custom codec.
 
 ```typescript
-const Clicked = message<{ el: HTMLElement }>('clicked')
-
-gateway.emit(Clicked({ el })) // ⛔ HTMLElement isn't serializable
+TransportableMessageRegistry.create()
+  .message('clicked')
+  .as<{ el: HTMLElement }>() // ⛔ HTMLElement isn't serializable
 ```
 
-Constraining payloads to plain data means a subscriber that receives a message
-after the queue was paused sees a faithful snapshot rather than a possibly-stale
-live reference.
+## Scheduling delivery
+
+By default a subscriber runs as soon as its message is delivered. Pass a
+`dispatcher` to schedule each delivery instead, for example to yield to the main
+thread between subscribers. It can also be swapped at runtime. Subscribers
+registered with `{ sync: true }` always run immediately.
+
+```typescript
+const bus = new MessageBus({
+  dispatcher: (deliver) => requestIdleCallback(deliver),
+})
+
+gateway.on(Greeting, render, { sync: true })
+
+bus.dispatcher = (deliver) => deliver()
+```
 
 ## Filtering subscriptions
 

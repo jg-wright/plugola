@@ -9,6 +9,7 @@ import {
   type CommandMessageFactory,
 } from '../Message/CommandMessage.ts'
 import type { Codec } from '../Message/Codec.ts'
+import type { Serializable } from '../Message/Serializable.ts'
 import {
   makeTransportable,
   type Transportable,
@@ -55,36 +56,74 @@ export class TransportableMessageRegistry<
 
   override message<Name extends string>(name: Name) {
     this.assertUnregisteredMessage(name)
-    return {
-      as: <T extends object = {}>(
-        codec?: Partial<Codec<Message & T>>,
-      ): TransportableMessageRegistry<
-        MFs & { [N in Name]: MessageFactory<T, Name> & Transportable<T> },
-        CFs
-      > => {
-        const factory = makeTransportable(message<T>(name), codec)
-        this.registerMessage(name, factory)
-        return this as TransportableMessageRegistry<any, any>
-      },
+    const as = (codec?: Partial<Codec<Message>>) => {
+      this.registerMessage(name, makeTransportable(message(name), codec))
+      return this as TransportableMessageRegistry<any, any>
     }
+    return { as: as as TransportableMessageAs<Name, MFs, CFs> }
   }
 
   override command<Name extends string>(name: Name) {
     this.assertUnregisteredCommand(name)
-    return {
-      as: <T extends object = {}, R = unknown>(
-        codec?: Partial<Codec<CommandMessage<R> & T>>,
-      ): TransportableMessageRegistry<
-        MFs,
-        CFs & {
-          [N in Name]: CommandMessageFactory<R, T, Name> &
-            Transportable<CommandMessage<R> & T>
-        }
-      > => {
-        const factory = makeTransportable(command<T, R>(name), codec)
-        this.registerCommand(name, factory)
-        return this as TransportableMessageRegistry<any, any>
-      },
+    const as = (codec?: Partial<Codec<CommandMessage>>) => {
+      this.registerCommand(name, makeTransportable(command(name), codec))
+      return this as TransportableMessageRegistry<any, any>
     }
+    return { as: as as TransportableCommandAs<Name, MFs, CFs> }
   }
 }
+
+/**
+ * Registers a transportable message. With the default codec the payload is what
+ * crosses the wire, so it must be {@link Serializable}; a payload that isn't
+ * (one holding a DOM node, a `Date`, a callback, …) requires a full custom
+ * codec, which decides what crosses instead.
+ */
+interface TransportableMessageAs<
+  Name extends string,
+  MFs extends Record<string, MessageFactory<any>>,
+  CFs extends Record<string, CommandMessageFactory<any, any>>,
+> {
+  <T extends object = {}>(
+    ...codec: CodecArgs<T, Message & T>
+  ): WithMessage<Name, T, MFs, CFs>
+}
+
+/** As {@link TransportableMessageAs}, for commands. */
+interface TransportableCommandAs<
+  Name extends string,
+  MFs extends Record<string, MessageFactory<any>>,
+  CFs extends Record<string, CommandMessageFactory<any, any>>,
+> {
+  <T extends object = {}, R = unknown>(
+    ...codec: CodecArgs<T, CommandMessage<R> & T>
+  ): WithCommand<Name, T, R, MFs, CFs>
+}
+
+type CodecArgs<T, M> = [T] extends [Serializable<T>]
+  ? [codec?: Partial<Codec<M>>]
+  : [codec: Codec<M>]
+
+type WithMessage<
+  Name extends string,
+  T extends object,
+  MFs extends Record<string, MessageFactory<any>>,
+  CFs extends Record<string, CommandMessageFactory<any, any>>,
+> = TransportableMessageRegistry<
+  MFs & { [N in Name]: MessageFactory<T, Name> & Transportable<T> },
+  CFs
+>
+
+type WithCommand<
+  Name extends string,
+  T extends object,
+  R,
+  MFs extends Record<string, MessageFactory<any>>,
+  CFs extends Record<string, CommandMessageFactory<any, any>>,
+> = TransportableMessageRegistry<
+  MFs,
+  CFs & {
+    [N in Name]: CommandMessageFactory<R, T, Name> &
+      Transportable<CommandMessage<R> & T>
+  }
+>

@@ -7,3 +7,11 @@ import type { MessageFactory, MessageOf } from '../Message/Message.ts'
 export interface Subscriber<M extends MessageFactory> {
   (message: MessageOf<M>): void | Promise<void>
 }
+
+export interface SubscribeOptions {
+  /**
+   * Deliver to this subscriber immediately, bypassing the bus's
+   * {@link Dispatcher}.
+   */
+  sync?: boolean
+}

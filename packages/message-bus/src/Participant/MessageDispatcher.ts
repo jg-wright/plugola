@@ -10,6 +10,7 @@ import type {
 } from '../Roles/Responder.ts'
 import type { Participant } from './Participant.ts'
 import type { MessageGateway } from './MessageGateway.ts'
+import type { MessageBus } from '../MessageBus.ts'
 
 /**
  * The inbound half of a {@link Participant}: the bus delivers messages/commands
@@ -27,14 +28,15 @@ export class MessageDispatcher {
 
   readonly #participant: Participant
 
-  constructor(participant: Participant) {
+  constructor(participant: Participant, bus: MessageBus) {
     this.#participant = participant
 
     this.dispatch = participant.queue.queueMethod((message: Message) => {
       for (const performer of participant.registry.subscribersFor(
         message.$factory,
       ) ?? [])
-        performer.perform(message)
+        if (performer.sync) performer.perform(message)
+        else bus.dispatcher(() => performer.perform(message))
     })
   }
 

@@ -49,7 +49,7 @@ export class Participant extends Queuable {
 
     this.onAbort(() => this.registry.clear())
 
-    this.dispatcher = new MessageDispatcher(this)
+    this.dispatcher = new MessageDispatcher(this, bus)
     this.gateway = new MessageGateway(this, bus)
   }
 

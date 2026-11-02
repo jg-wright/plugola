@@ -11,6 +11,7 @@ export * from './Message/Named.ts'
 
 // Handler roles and subscription filtering
 export * from './Roles/Subscriber.ts'
+export * from './Roles/Dispatcher.ts'
 export * from './Roles/Responder.ts'
 export * from './Roles/Interceptor.ts'
 export * from './Filter.ts'
