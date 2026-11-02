@@ -9,7 +9,7 @@ export type QueryParam =
 export type QueryParams = Record<string, QueryParam | QueryParam[]>
 
 const queryParams = {
-  ...(typeof process?.env.PLUGOLA_QUERY !== 'undefined'
+  ...(typeof process !== 'undefined' && process.env?.PLUGOLA_QUERY
     ? parseQueryParams(process.env.PLUGOLA_QUERY)
     : {}),
   ...(typeof location !== 'undefined' ? parseQueryParams(location.search) : {}),

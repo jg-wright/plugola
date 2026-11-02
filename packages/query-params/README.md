@@ -84,3 +84,20 @@ parseQueryParams('cfg.foo=bar', {
 })
 // { foo: 'bar' }
 ```
+
+### Knowing how a value was derived
+
+`set` also receives an `info` object describing how the value was derived. Its
+`operation` is one of `set`, `true`, `false`, `array`, `prepend`, `append`,
+`remove`, `flags` or `json`, and the array operations also include the decoded
+`items`. This lets you apply `[^]`, `[+]` and `[-]` against something other
+than the query params parsed so far, such as an existing config array.
+
+```javascript
+parseQueryParams('cfg.plugins[+]=foo', {
+  set: (queryParams, key, value, { operation, items }) => {
+    if (operation === 'append') config[key] = [...config[key], ...items]
+    return queryParams
+  },
+})
+```
