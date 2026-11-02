@@ -172,7 +172,7 @@ export class MessageBus implements Runnable {
     const subscriberNames = this.#subscriberRoutes.get(message.$factory)
     if (!subscriberNames?.size) return message
 
-    for (const name of subscriberNames)
+    for (const name of [...subscriberNames])
       this.#participants.get(name)?.dispatcher.dispatch(message)
 
     return message
@@ -199,7 +199,7 @@ export class MessageBus implements Runnable {
     if (!responderNames?.size) return
 
     await Promise.all(
-      Array.from(responderNames, (name) =>
+      [...responderNames].map((name) =>
         this.#participants
           .get(name)
           ?.dispatcher.dispatchCommand(command, context, reportError),

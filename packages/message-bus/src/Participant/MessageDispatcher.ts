@@ -33,9 +33,9 @@ export class MessageDispatcher {
     this.#participant = participant
 
     this.dispatch = participant.queue.queueMethod((message: Message) => {
-      for (const performer of participant.registry.subscribersFor(
-        message.$factory,
-      ) ?? [])
+      for (const performer of [
+        ...(participant.registry.subscribersFor(message.$factory) ?? []),
+      ])
         if (performer.sync) performer.perform(message)
         else bus.dispatcher(() => performer.perform(message))
     })
@@ -84,7 +84,7 @@ export class MessageDispatcher {
     if (!responders?.size) return
 
     await Promise.all(
-      Array.from(responders, async (performer) => {
+      [...responders].map(async (performer) => {
         try {
           await performer.perform(command, context)
         } catch (error) {
