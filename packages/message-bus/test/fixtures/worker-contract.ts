@@ -9,11 +9,15 @@ import {
 
 export function createBridge(port: PortLike) {
   const bus = new MessageBus()
-  const registry = new TransportableMessageRegistry()
-  const Ready = registry.registerMessage<{ from: string }>('ready')
-  const Sum = registry.registerCommand<{ a: number; b: number }, number>('sum')
+  const registry = TransportableMessageRegistry.create()
+    .message('ready')
+    .as<{ from: string }>()
+
+    .command('sum')
+    .as<{ a: number; b: number }, number>()
+
   new MessagingBridge(bus, new PortChannel(port), registry)
-  return { bus, Ready, Sum }
+  return { bus, Ready: registry.messages.ready, Sum: registry.commands.sum }
 }
 
 export function useWorker(): AsyncDisposable & { worker: Worker } {

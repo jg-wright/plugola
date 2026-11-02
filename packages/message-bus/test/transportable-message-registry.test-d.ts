@@ -12,17 +12,20 @@ import type {
 import type { Transportable } from '../src/Message/Transportable.ts'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 
-const registry = new TransportableMessageRegistry()
+const registry = TransportableMessageRegistry.create()
+  .message('clicked')
+  .as<{ x: number; y: number }>()
 
-// register() returns the precise message class type ...
-const Clicked = registry.registerMessage<{ x: number; y: number }>('clicked')
+  .command('listFiles')
+  .as<{ dir: string }, string>()
+
+// message() records the precise message factory type ...
+const { clicked: Clicked } = registry.messages
 expectTypeOf(Clicked).toExtend<MessageFactory<{ x: number; y: number }>>()
 expectTypeOf(Clicked({ x: 1, y: 2 }).x).toEqualTypeOf<number>()
 
-// ... and command() the precise command class type, response type intact.
-const ListFiles = registry.registerCommand<{ dir: string }, string>(
-  'list-files',
-)
+// ... and command() the precise command factory type, response type intact.
+const { listFiles: ListFiles } = registry.commands
 expectTypeOf(ListFiles).toExtend<
   CommandMessageFactory<string, { dir: string }>
 >()

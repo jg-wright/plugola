@@ -10,7 +10,7 @@ import type {
   ResponderErrorHandler,
 } from './Roles/Responder.ts'
 import { getOrInsert } from './lang/Map.ts'
-import { Runnable } from '@plugola/queue'
+import type { Runnable } from '@plugola/queue'
 
 /**
  * The message bus: the shared hub the host owns. It hands out a
