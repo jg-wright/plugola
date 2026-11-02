@@ -15,12 +15,6 @@ export default class DependencyGraph<T extends Plugin> extends Graph<
     this.addEdge('optionalDepender', dependency, source)
   }
 
-  *names() {
-    for (const vertex of this.verticies()) {
-      yield vertex.name
-    }
-  }
-
   dependencies(node: T) {
     return this.bfs(node, 'dependency', false)
   }

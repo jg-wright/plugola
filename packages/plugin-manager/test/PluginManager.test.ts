@@ -74,6 +74,58 @@ test('initialize optional dependency tree', async () => {
   expect(result).toBe('foomung')
 })
 
+test('an optional dependency is enabled before its depender, even alongside hard dependencies', async () => {
+  // Regression: enabling a plugin's hard dependencies used to clobber the
+  // shared "plugins to enable" set, so an optional dependency requested in the
+  // same batch was no longer recognised as one — and the depender's enable()
+  // no longer waited for it.
+  let optEnabled = false
+
+  pluginManager.registerPlugin('dep', {
+    enable() {},
+  })
+
+  pluginManager.registerPlugin('opt', {
+    async enable() {
+      await timeout(10)
+      optEnabled = true
+    },
+  })
+
+  pluginManager.registerPlugin('mung', {
+    dependencies: ['dep'],
+    optionalDependencies: ['opt'],
+    enable() {
+      // opt was requested in this batch, so it must be enabled before us.
+      expect(optEnabled).toBe(true)
+    },
+  })
+
+  await pluginManager.enablePlugins(['mung', 'opt'])
+
+  expect(pluginManager.enabledPlugins).toContain('opt')
+})
+
+test('a plugin can be registered before its dependency', async () => {
+  let result = ''
+
+  pluginManager.registerPlugin('dependent', {
+    dependencies: ['dependency'],
+    enable() {
+      result += 'dependent'
+    },
+  })
+
+  pluginManager.registerPlugin('dependency', {
+    enable() {
+      result += 'dependency'
+    },
+  })
+
+  await pluginManager.enablePlugins(['dependent'])
+  expect(result).toBe('dependencydependent')
+})
+
 test('running normal plugins', async () => {
   let result: string
 
@@ -114,6 +166,48 @@ test('running with a dependency tree', async () => {
   await pluginManager.enablePlugins(['mung'])
   await pluginManager.run()
   expect(result).toBe('foobarmung')
+})
+
+test('run() waits for an enabled optional dependency', async () => {
+  const order: string[] = []
+
+  pluginManager.registerPlugin('opt', {
+    async run() {
+      await timeout(10)
+      order.push('opt')
+    },
+  })
+
+  pluginManager.registerPlugin('mung', {
+    optionalDependencies: ['opt'],
+    run() {
+      order.push('mung')
+    },
+  })
+
+  await pluginManager.enablePlugins(['mung', 'opt'])
+  await pluginManager.run()
+
+  expect(order).toEqual(['opt', 'mung'])
+})
+
+test('run() does not wait for an optional dependency that is not enabled', async () => {
+  const mung = vi.fn()
+
+  pluginManager.registerPlugin('opt', {
+    run() {},
+  })
+
+  pluginManager.registerPlugin('mung', {
+    optionalDependencies: ['opt'],
+    run: mung,
+  })
+
+  // opt is registered but not enabled, so it must not gate mung.
+  await pluginManager.enablePlugins(['mung'])
+  await pluginManager.run()
+
+  expect(mung).toHaveBeenCalled()
 })
 
 test('extra context', async () => {
@@ -327,6 +421,73 @@ describe('disabling plugins', () => {
   })
 })
 
+test('enabling or disabling an unknown plugin throws by default', async () => {
+  await expect(pluginManager.enablePlugins(['nope'])).rejects.toThrow(
+    'The plugin "nope" isn\'t registered.',
+  )
+  expect(() => pluginManager.disablePlugins(['nope'])).toThrow(
+    'The plugin "nope" isn\'t registered.',
+  )
+})
+
+test('onUnknownPlugin handles unregistered plugins instead of throwing', async () => {
+  const onUnknownPlugin = vi.fn<(name: string, phase: string) => void>()
+  const pluginManager = new PluginManager({ onUnknownPlugin })
+
+  await pluginManager.enablePlugins(['nope'])
+  expect(pluginManager.disablePlugins(['nope'])).toBe(0)
+
+  expect(onUnknownPlugin).toHaveBeenCalledWith('nope', 'enable')
+  expect(onUnknownPlugin).toHaveBeenCalledWith('nope', 'disable')
+})
+
+test('a plugin whose enable throws is rolled back and reported, siblings continue', async () => {
+  const onPluginError = vi.fn()
+  const pluginManager = new PluginManager({ onPluginError })
+  const good = vi.fn()
+
+  pluginManager.registerPlugin('bad', {
+    enable() {
+      throw new Error('boom')
+    },
+  })
+
+  pluginManager.registerPlugin('good', {
+    enable: good,
+  })
+
+  await pluginManager.enablePlugins(['bad', 'good'])
+
+  expect(good).toHaveBeenCalled()
+  expect(pluginManager.enabledPlugins).toContain('good')
+  expect(pluginManager.enabledPlugins).not.toContain('bad')
+  expect(onPluginError).toHaveBeenCalledOnce()
+  expect(onPluginError.mock.calls[0][2]).toBe('enable')
+})
+
+test('a plugin whose run throws is reported, siblings still run', async () => {
+  const onPluginError = vi.fn()
+  const pluginManager = new PluginManager({ onPluginError })
+  const good = vi.fn()
+
+  pluginManager.registerPlugin('bad', {
+    run() {
+      throw new Error('boom')
+    },
+  })
+
+  pluginManager.registerPlugin('good', {
+    run: good,
+  })
+
+  await pluginManager.enableAllPlugins()
+  await pluginManager.run()
+
+  expect(good).toHaveBeenCalled()
+  expect(onPluginError).toHaveBeenCalledOnce()
+  expect(onPluginError.mock.calls[0][2]).toBe('run')
+})
+
 test('plugins that time out', async () => {
   const abort = vi.fn<(reason: string) => void>()
 
@@ -348,6 +509,38 @@ test('plugins that time out', async () => {
   expect(abort).toHaveBeenCalledTimes(2)
   expect(abort).toHaveBeenCalledWith('init')
   expect(abort).toHaveBeenCalledWith('run')
+})
+
+test('a circular run dependency throws instead of hanging', async () => {
+  pluginManager.registerPlugin('a', {
+    dependencies: ['b'],
+    run() {},
+  })
+
+  pluginManager.registerPlugin('b', {
+    dependencies: ['a'],
+    run() {},
+  })
+
+  await pluginManager.enableAllPlugins()
+  await expect(pluginManager.run()).rejects.toThrow(/Circular dependency/)
+})
+
+test('withOptions produces a manager with isolated runtime state', async () => {
+  pluginManager.registerPlugin('p', {
+    enable() {},
+  })
+
+  await pluginManager.enablePlugins(['p'])
+  expect(pluginManager.enabledPlugins).toContain('p')
+
+  const clone = pluginManager.withOptions({})
+  await clone.enablePlugins(['p'])
+  clone.disablePlugins(['p'])
+
+  // Disabling in the clone must not disturb the original.
+  expect(clone.enabledPlugins).not.toContain('p')
+  expect(pluginManager.enabledPlugins).toContain('p')
 })
 
 test('replacing context', async () => {
