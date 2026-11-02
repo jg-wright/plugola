@@ -92,9 +92,9 @@ export function assertTransportable() {
     .command('get-widget')
     .as<{ id: string }, Widget>()
 
-  // @ts-expect-error the default codec puts the Widget on the wire
   TransportableMessageRegistry.create()
     .message('clicked')
+    // @ts-expect-error the default codec puts the Widget on the wire
     .as<{ target: Widget }>()
 
   TransportableMessageRegistry.create()
