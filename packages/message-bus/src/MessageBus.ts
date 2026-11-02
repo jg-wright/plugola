@@ -10,6 +10,7 @@ import type {
   ResponderErrorHandler,
 } from './Roles/Responder.ts'
 import { getOrInsert } from './lang/Map.ts'
+import { Runnable } from '@plugola/queue'
 
 /**
  * The message bus: the shared hub the host owns. It hands out a
@@ -31,7 +32,12 @@ import { getOrInsert } from './lang/Map.ts'
  * b.emit(Ping())
  * ```
  */
-export class MessageBus {
+export class MessageBus implements Runnable {
+  #running = false
+  get running() {
+    return this.#running
+  }
+
   readonly #participants = new Map<string, Participant>()
 
   readonly #subscriberRoutes = new Map<MessageFactory, Set<string>>()
@@ -123,6 +129,8 @@ export class MessageBus {
         for (const names of routes.values()) names.delete(name)
     })
 
+    if (this.#running) participant.resume()
+
     return participant.gateway
   }
 
@@ -199,6 +207,7 @@ export class MessageBus {
    * every participant on the bus.
    */
   resume(name?: string) {
+    this.#running = true
     if (name === undefined)
       for (const participant of this.#participants.values())
         participant.resume()
@@ -211,6 +220,7 @@ export class MessageBus {
    * pauses every participant on the bus. Reversible via {@link MessageBus.prototype.resume}.
    */
   pause(name?: string) {
+    this.#running = false
     if (name === undefined)
       for (const participant of this.#participants.values()) participant.pause()
     else this.#participants.get(name)?.pause()

@@ -7,7 +7,7 @@ import {
 /**
  * A name→factory registry for the messages and commands a bus deals in, and the
  * "defining is registering" rule that keeps their `$name`s unique. Calling
- * {@link MessageRegistry.registerMessage} / {@link MessageRegistry.registerCommand}
+ * {@link MessageRegistry.prototype.registerMessage} / {@link MessageRegistry.prototype.registerCommand}
  * creates the factory (via {@link message} / {@link command}) and records it in one
  * act, so a registered message can't be forgotten, and a name can't be reused.
  *
@@ -168,8 +168,11 @@ export class MessageRegistry<
 export type MessageFactories<MR extends MessageRegistry<any, any>> =
   MR extends MessageRegistry<infer MFs, any> ? MFs : never
 
+export type CommandFactories<MR extends MessageRegistry<any, any>> =
+  MR extends MessageRegistry<any, infer CFs> ? CFs : never
+
 export type MessageNames<MR extends MessageRegistry<any, any>> =
-  MR extends MessageRegistry<infer MFs, any> ? keyof MFs : never
+  MR extends MessageRegistry<infer MFs, any> ? keyof MFs & string : never
 
 export type CombineMessageRegistries<MRs extends MessageRegistry[]> =
   MessageRegistry<MergeMessageFactories<MRs>, MergeCommandFactories<MRs>>

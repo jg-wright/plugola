@@ -62,6 +62,10 @@ export class MessageGateway {
     )
   }
 
+  get queue() {
+    return this.#participant.queue
+  }
+
   /** This participant's unique name on the bus. */
   get name() {
     return this.#participant.name
