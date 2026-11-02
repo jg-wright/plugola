@@ -45,11 +45,11 @@ export class Store<Actions extends BaseActions, Context> {
   }
 
   resume() {
-    this.#queue.start()
+    this.#queue.resume()
   }
 
   pause() {
-    this.#queue.stop()
+    this.#queue.pause()
   }
 
   on<Action extends keyof Actions>(
