@@ -47,7 +47,11 @@ export class Participant extends Queuable {
       ? AbortSignal.any([abortSignal, this.#abortController.signal])
       : this.#abortController.signal
 
-    this.onAbort(() => this.registry.clear())
+    this.onAbort(() => {
+      this.registry.clear()
+      // Deliver what it emitted while paused; inbound messages find no handlers.
+      this.resume()
+    })
 
     this.dispatcher = new MessageDispatcher(this, bus)
     this.gateway = new MessageGateway(this, bus)
