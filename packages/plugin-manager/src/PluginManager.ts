@@ -79,6 +79,25 @@ export interface PluginManagerOptions<
 }
 
 /**
+ * Options for a single {@link PluginManager.run} call.
+ */
+export interface RunOptions {
+  /**
+   * Called once every enabled plugin that doesn't depend on another enabled
+   * plugin has had its `run` hook *invoked* — not settled — or been skipped
+   * (refused by a gate, disabled, or has no `run`). Useful for holding back
+   * outside events (such as resuming a paused message bus) until every plugin
+   * has had the chance to set up what it does synchronously in `run`.
+   *
+   * @remarks
+   * Plugins that depend on another plugin don't count: their `run` waits for
+   * their dependencies' `run` to settle, which may itself wait on whatever
+   * this callback releases. They still run once their dependencies have.
+   */
+  onStarted?(): void
+}
+
+/**
  * Registers plugins, resolves their dependencies, and drives them through a
  * two-phase lifecycle: **enable** (activate a selected set of plugins and their
  * dependencies) and **run** (invoke each enabled plugin's work). Within each
@@ -368,13 +387,34 @@ export default class PluginManager<
    * dependencies (and its enabled optional dependencies) have run, and each runs
    * at most once. Resolves when all enabled plugins have finished running.
    *
+   * @param options - See {@link RunOptions}.
    * @throws If the enabled plugins contain a circular `run` dependency.
    */
-  async run() {
-    let promises: Promise<void>[] = []
-    for (const pluginName of this.#enabledPlugins)
-      promises.push(this.#runPlugin(this.#getPlugin(pluginName)))
-    await Promise.all(promises)
+  async run({ onStarted }: RunOptions = {}) {
+    const plugins = Array.from(this.#enabledPlugins, (pluginName) =>
+      this.#getPlugin(pluginName),
+    )
+
+    // Only plugins that don't wait on another plugin's run count towards
+    // `onStarted`; waiting on the rest could deadlock (see RunOptions).
+    const independent = new Set(
+      plugins.filter((plugin) => !this.#hasEnabledRunDependency(plugin)),
+    )
+    let unstarted = independent.size
+    if (!unstarted) onStarted?.()
+    const started = () => {
+      if (--unstarted === 0) onStarted?.()
+    }
+
+    await Promise.all(
+      plugins.map((plugin) =>
+        this.#runPlugin(
+          plugin,
+          new Set(),
+          independent.has(plugin) ? started : undefined,
+        ),
+      ),
+    )
   }
 
   /** Enable every registered plugin. */
@@ -631,47 +671,71 @@ export default class PluginManager<
     return false
   }
 
-  async #runPlugin(plugin: Plugin, path: Set<Plugin> = new Set()) {
-    if (path.has(plugin))
-      throw new Error(
-        `Circular dependency detected: ${[...path, plugin]
-          .map((p) => p.name)
-          .join(' -> ')}`,
-      )
-
-    const nextPath = new Set(path).add(plugin)
-    await this.#runDependencies(plugin, nextPath)
-
-    if (this.#ran.has(plugin) || !plugin.run) return
-
-    // A dependency may have been refused by a gate, or this plugin disabled,
-    // while its dependencies ran.
-    if (
-      !this.#enabledPlugins.has(plugin.name) ||
-      !this.#dependenciesEnabled(plugin)
-    )
-      return
-
-    if (this.#gates.size && !(await this.#passesGates(plugin, 'run'))) {
-      this.#disablePlugin(plugin, true)
-      return
-    }
-
-    const { signal } = this.#abortController(plugin)
-    if (signal.aborted) return
-
-    this.#ran.add(plugin)
+  /**
+   * @param onStarted - Called once, as soon as the plugin's `run` hook has been
+   * invoked (before it settles) or the plugin has been skipped.
+   */
+  async #runPlugin(
+    plugin: Plugin,
+    path: Set<Plugin> = new Set(),
+    onStarted?: () => void,
+  ) {
+    const started = once(onStarted)
 
     try {
-      await this.#pluginRace(
-        plugin,
-        () => plugin.run!(this.#createRunContext(plugin, signal)),
-        this.#options.pluginTimeout,
+      if (path.has(plugin))
+        throw new Error(
+          `Circular dependency detected: ${[...path, plugin]
+            .map((p) => p.name)
+            .join(' -> ')}`,
+        )
+
+      const nextPath = new Set(path).add(plugin)
+      await this.#runDependencies(plugin, nextPath)
+
+      if (this.#ran.has(plugin) || !plugin.run) return
+
+      // A dependency may have been refused by a gate, or this plugin disabled,
+      // while its dependencies ran.
+      if (
+        !this.#enabledPlugins.has(plugin.name) ||
+        !this.#dependenciesEnabled(plugin)
       )
-    } catch (error) {
-      // Isolate the failure so sibling plugins still run.
-      this.#reportPluginError(error, plugin, 'run')
+        return
+
+      if (this.#gates.size && !(await this.#passesGates(plugin, 'run'))) {
+        this.#disablePlugin(plugin, true)
+        return
+      }
+
+      const { signal } = this.#abortController(plugin)
+      if (signal.aborted) return
+
+      this.#ran.add(plugin)
+
+      try {
+        const running = this.#pluginRace(
+          plugin,
+          () => plugin.run!(this.#createRunContext(plugin, signal)),
+          this.#options.pluginTimeout,
+        )
+        started()
+        await running
+      } catch (error) {
+        // Isolate the failure so sibling plugins still run.
+        this.#reportPluginError(error, plugin, 'run')
+      }
+    } finally {
+      started()
     }
+  }
+
+  #hasEnabledRunDependency(plugin: Plugin) {
+    for (const dependency of this.#dependencyGraph.dependencies(plugin))
+      if (this.#enabledPlugins.has(dependency.name)) return true
+    for (const dependency of this.#dependencyGraph.optionalDependencies(plugin))
+      if (this.#enabledPlugins.has(dependency.name)) return true
+    return false
   }
 
   #pluginRace(plugin: Plugin, fn: () => Promise<any>, ms?: number) {
@@ -747,3 +811,12 @@ export default class PluginManager<
 }
 
 type ManagedPlugin<PluginMeta extends object> = Plugin<any, any> & PluginMeta
+
+function once(fn?: () => void) {
+  let called = false
+  return () => {
+    if (called) return
+    called = true
+    fn?.()
+  }
+}

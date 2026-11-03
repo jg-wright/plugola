@@ -155,6 +155,27 @@ await pluginManager.enablePlugins(['main'])
 await pluginManager.run()
 ```
 
+## Knowing when every plugin has started
+
+`run()` resolves once every `run` hook has _settled_, which can be long after
+they were called. Pass `onStarted` to be told as soon as every plugin's `run`
+has been _invoked_ — for example, to resume a paused message bus only once every
+plugin has subscribed, whatever order they were registered in:
+
+```typescript
+await bus.resumeUntil(pluginManager.enableAllPlugins())
+await pluginManager.run({
+  onStarted() {
+    bus.resume()
+  },
+})
+```
+
+Only the synchronous part of each `run` (up to its first `await`) is guaranteed
+to have happened. Plugins that depend on another enabled plugin don't count —
+their `run` waits for their dependencies to settle, which may itself be waiting
+on whatever `onStarted` releases.
+
 ## Enabling and disabling at runtime
 
 Inside an `enable` hook you can change the active plugin set through the context:
@@ -309,7 +330,7 @@ Options ([`PluginManagerOptions`](src/PluginManager.ts)):
 | `enableAllPlugins()`                                      | Enable every registered plugin.                       |
 | `disablePlugins(names, force?)`                           | Disable plugins; returns the count removed.           |
 | `disableAllPlugins()`                                     | Disable every registered plugin.                      |
-| `run()`                                                   | Run the `run` hook of every enabled plugin.           |
+| `run({ onStarted? })`                                     | Run the `run` hook of every enabled plugin.           |
 | `addGate(gate)`                                           | Add a gate; returns a function that removes it.       |
 | `checkGates(name)`                                        | Whether a plugin currently passes every gate.         |
 | `recheckGates()`                                          | Disable enabled plugins that no longer pass a gate.   |

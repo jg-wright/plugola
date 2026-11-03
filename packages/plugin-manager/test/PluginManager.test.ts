@@ -210,6 +210,106 @@ test('run() does not wait for an optional dependency that is not enabled', async
   expect(mung).toHaveBeenCalled()
 })
 
+describe('run() onStarted', () => {
+  test('is called once every run hook has been invoked, before they settle', async () => {
+    const events: string[] = []
+    const latch = createLatch()
+
+    for (const name of ['foo', 'bar'])
+      pluginManager.registerPlugin(name, {
+        async run() {
+          events.push(`${name} invoked`)
+          await latch.promise
+          events.push(`${name} settled`)
+        },
+      })
+
+    await pluginManager.enableAllPlugins()
+    await pluginManager.run({
+      onStarted() {
+        events.push('started')
+        latch.release()
+      },
+    })
+
+    expect(events).toEqual([
+      'foo invoked',
+      'bar invoked',
+      'started',
+      'foo settled',
+      'bar settled',
+    ])
+  })
+
+  test('does not wait for plugins that depend on another', async () => {
+    const events: string[] = []
+    const latch = createLatch()
+
+    pluginManager.registerPlugin('foo', {
+      async run() {
+        events.push('foo invoked')
+        await latch.promise
+      },
+    })
+
+    pluginManager.registerPlugin('bar', {
+      dependencies: ['foo'],
+      run() {
+        events.push('bar invoked')
+      },
+    })
+
+    pluginManager.registerPlugin('mung', {
+      optionalDependencies: ['foo'],
+      run() {
+        events.push('mung invoked')
+      },
+    })
+
+    await pluginManager.enableAllPlugins()
+    await pluginManager.run({
+      onStarted() {
+        events.push('started')
+        latch.release()
+      },
+    })
+
+    expect(events).toEqual([
+      'foo invoked',
+      'started',
+      'bar invoked',
+      'mung invoked',
+    ])
+  })
+
+  test('counts plugins that have no run hook or whose run throws', async () => {
+    const onStarted = vi.fn()
+    const onPluginError = vi.fn()
+    pluginManager = new PluginManager({ onPluginError })
+
+    pluginManager.registerPlugin('foo', {})
+    pluginManager.registerPlugin('bar', {
+      run() {
+        throw new Error('boom')
+      },
+    })
+
+    await pluginManager.enableAllPlugins()
+    await pluginManager.run({ onStarted })
+
+    expect(onStarted).toHaveBeenCalledOnce()
+    expect(onPluginError).toHaveBeenCalledOnce()
+  })
+
+  test('is called when there are no enabled plugins', async () => {
+    const onStarted = vi.fn()
+
+    await pluginManager.run({ onStarted })
+
+    expect(onStarted).toHaveBeenCalledOnce()
+  })
+})
+
 test('extra context', async () => {
   const pluginManager = new PluginManager({
     addContext(pluginName) {
@@ -563,3 +663,9 @@ test('replacing context', async () => {
   expect(run).toHaveBeenCalledTimes(1)
   expect(run.mock.calls[0][0].foo).toBe('rab')
 })
+
+function createLatch() {
+  let release!: () => void
+  const promise = new Promise<void>((resolve) => (release = resolve))
+  return { promise, release }
+}

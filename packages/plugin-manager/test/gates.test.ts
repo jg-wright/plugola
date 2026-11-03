@@ -71,6 +71,31 @@ describe('gates', () => {
     expect(enable).toHaveBeenCalledTimes(1)
   })
 
+  test('run onStarted waits for async gates, counting refused plugins', async () => {
+    let consented = true
+    const pm = manager({
+      gates: [async ({ vendor }) => vendor === undefined || consented],
+    })
+    const events: string[] = []
+    pm.registerPlugin('ads', {
+      vendor: 1,
+      run: () => {
+        events.push('ads invoked')
+      },
+    })
+    pm.registerPlugin('tracking', {
+      run: () => {
+        events.push('tracking invoked')
+      },
+    })
+
+    await pm.enablePlugins(['ads', 'tracking'])
+    consented = false // ads is refused before run
+    await pm.run({ onStarted: () => events.push('started') })
+
+    expect(events).toEqual(['tracking invoked', 'started'])
+  })
+
   test('a plugin is not enabled when its dependency is refused', async () => {
     const pm = manager({ gates: [allowVendors()] })
     const enable = vi.fn()
