@@ -44,6 +44,7 @@ export class MessageBus extends Queuable {
   readonly emit: <M extends Message>(
     message: M,
     from?: string,
+    options?: { invoked?: boolean },
   ) => Promise<M | typeof CANCEL>
 
   readonly invoke: <T>(
@@ -192,8 +193,9 @@ export class MessageBus extends Queuable {
   readonly #emit = async <M extends Message>(
     message: M,
     from?: string,
+    { invoked = false }: { invoked?: boolean } = {},
   ): Promise<M | typeof CANCEL> => {
-    this.notify({ type: 'emit', message, from })
+    this.notify({ type: 'emit', message, from, invoked })
 
     const interceptorNames = [
       ...(this.#interceptorRoutes.get(message.$factory) ?? []),

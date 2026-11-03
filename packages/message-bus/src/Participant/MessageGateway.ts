@@ -53,11 +53,20 @@ export class MessageGateway {
    */
   readonly emit: <M extends Message>(message: M) => Promise<M | typeof CANCEL>
 
+  /** Emits a command on its way to being invoked. */
+  readonly #emitCommand: (
+    command: CommandMessage,
+  ) => Promise<CommandMessage | typeof CANCEL>
+
   constructor(participant: Participant, bus: MessageBus) {
     this.#participant = participant
     this.#bus = bus
     this.emit = participant.queue.queueMethod(<M extends Message>(message: M) =>
       bus.emit(message, participant.name),
+    )
+    this.#emitCommand = participant.queue.queueMethod(
+      (command: CommandMessage) =>
+        bus.emit(command, participant.name, { invoked: true }),
     )
   }
 
@@ -292,7 +301,7 @@ export class MessageGateway {
     },
     reportError: ResponderErrorHandler,
   ) => {
-    const result = await this.emit(command)
+    const result = await this.#emitCommand(command)
     if (result === CANCEL) return
     await this.#bus.invoke(result, context, reportError)
   }

@@ -34,6 +34,19 @@ test('observers see emits, deliveries and responses', async () => {
   ])
 })
 
+test('observers can tell an invoked command from an emitted message', async () => {
+  const bus = new MessageBus()
+  const a = bus.gateway('a')
+  const emits: boolean[] = []
+  bus.observe((event) => event.type === 'emit' && emits.push(event.invoked))
+  bus.resume()
+
+  await a.emit(Ping({ n: 1 }))
+  await a.invoke(Call()).collect()
+
+  expect(emits).toEqual([false, true])
+})
+
 test('observers see cancelled messages', async () => {
   const bus = new MessageBus()
   const a = bus.gateway('a')

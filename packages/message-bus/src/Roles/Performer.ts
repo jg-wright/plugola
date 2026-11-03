@@ -4,6 +4,4 @@ import { Responder } from './Responder.ts'
 import { Subscriber } from './Subscriber.ts'
 
 export type Performer<M extends MessageFactory = MessageFactory> =
-  | Interceptor<M>
-  | Responder<M>
-  | Subscriber<M>
+  Interceptor<M> | Responder<M> | Subscriber<M>
