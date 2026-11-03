@@ -11,7 +11,7 @@ import type {
 } from './Roles/Responder.ts'
 import { getOrInsert } from './lang/Map.ts'
 import { chain, isPromiseLike } from './lang/chain.ts'
-import type { Runnable } from '@plugola/queue'
+import { Queuable } from '@plugola/queue'
 import { type Dispatcher, dispatchImmediately } from './Roles/Dispatcher.ts'
 
 /**
@@ -34,22 +34,28 @@ import { type Dispatcher, dispatchImmediately } from './Roles/Dispatcher.ts'
  * b.emit(Ping())
  * ```
  */
-export class MessageBus implements Runnable {
+export class MessageBus extends Queuable {
   /**
    * Schedules each delivery of a message to a subscriber. Swappable at runtime;
    * defaults to delivering immediately.
    */
   dispatcher: Dispatcher
 
+  readonly emit: <M extends Message>(message: M) => Promise<M | typeof CANCEL>
+
+  readonly invoke: <T>(
+    command: CommandMessage<T>,
+    context: ResponderContext<CommandMessageFactory<T>>,
+    reportError: ResponderErrorHandler,
+  ) => Promise<void>
+
   constructor({
     dispatcher = dispatchImmediately,
   }: { dispatcher?: Dispatcher } = {}) {
+    super()
     this.dispatcher = dispatcher
-  }
-
-  #running = false
-  get running() {
-    return this.#running
+    this.emit = this.queue.queueMethod(this.#emit)
+    this.invoke = this.queue.queueMethod(this.#invoke)
   }
 
   readonly #participants = new Map<string, Participant>()
@@ -123,7 +129,6 @@ export class MessageBus implements Runnable {
    * facade — the object a participant uses to subscribe, emit, and invoke. Names
    * are unique for the bus's lifetime; a name frees up again once its participant
    * is aborted.
-   *
    * @throws if a participant with `name` is already registered.
    */
   gateway(name: string, abortSignal?: AbortSignal) {
@@ -143,7 +148,7 @@ export class MessageBus implements Runnable {
         for (const names of routes.values()) names.delete(name)
     })
 
-    if (this.#running) participant.resume()
+    if (this.running) participant.resume()
 
     return participant.gateway
   }
@@ -156,7 +161,9 @@ export class MessageBus implements Runnable {
    * sender's queue; this is the bus-level primitive it calls.
    * @internal
    */
-  async emit<M extends Message>(message: M): Promise<M | typeof CANCEL> {
+  readonly #emit = async <M extends Message>(
+    message: M,
+  ): Promise<M | typeof CANCEL> => {
     const interceptorNames = [
       ...(this.#interceptorRoutes.get(message.$factory) ?? []),
     ]
@@ -187,11 +194,11 @@ export class MessageBus implements Runnable {
    * primitive it calls.
    * @internal
    */
-  async invoke<T>(
+  readonly #invoke = async <T>(
     command: CommandMessage<T>,
     context: ResponderContext<CommandMessageFactory<T>>,
     reportError: ResponderErrorHandler,
-  ): Promise<void> {
+  ): Promise<void> => {
     const responderNames = this.#responderRoutes.get(
       command.$factory as CommandMessageFactory<T>,
     )
@@ -222,12 +229,12 @@ export class MessageBus implements Runnable {
    * life. With a `name`, resumes just that participant; with no argument, resumes
    * every participant on the bus.
    */
-  resume(name?: string) {
-    this.#running = true
-    if (name === undefined)
+  override resume(name?: string) {
+    if (name === undefined) {
+      super.resume()
       for (const participant of this.#participants.values())
         participant.resume()
-    else this.#participants.get(name)?.resume()
+    } else this.#participants.get(name)?.resume()
   }
 
   /**
@@ -235,11 +242,11 @@ export class MessageBus implements Runnable {
    * until resumed. With a `name`, pauses just that participant; with no argument,
    * pauses every participant on the bus. Reversible via {@link MessageBus.prototype.resume}.
    */
-  pause(name?: string) {
-    this.#running = false
-    if (name === undefined)
+  override pause(name?: string) {
+    if (name === undefined) {
+      super.pause()
       for (const participant of this.#participants.values()) participant.pause()
-    else this.#participants.get(name)?.pause()
+    } else this.#participants.get(name)?.pause()
   }
 
   /**
