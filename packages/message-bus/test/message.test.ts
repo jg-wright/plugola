@@ -77,3 +77,14 @@ test('a generated message is routable on the bus by its factory identity', () =>
   expect(spy.mock.calls[0][0].$factory).toBe(Clicked)
   expect(spy.mock.calls[0][0].x).toBe(1)
 })
+
+test("a message's metadata is not enumerable", () => {
+  const Clicked = message<{ x: number }>('clicked')
+  const clicked = Clicked({ x: 1 })
+
+  expect(Object.keys(clicked)).toEqual(['x'])
+  expect({ ...clicked }).toEqual({ x: 1 })
+  expect(JSON.parse(JSON.stringify(clicked))).toEqual({ x: 1 })
+  expect(clicked.$name).toBe('clicked')
+  expect(clicked.$factory).toBe(Clicked)
+})
