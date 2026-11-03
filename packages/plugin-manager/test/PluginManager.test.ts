@@ -191,6 +191,30 @@ test('run() waits for an enabled optional dependency', async () => {
   expect(order).toEqual(['opt', 'mung'])
 })
 
+test('run() waits for a dependency that is already running', async () => {
+  const order: string[] = []
+
+  pluginManager.registerPlugin('dep', {
+    async run() {
+      await timeout(10)
+      order.push('dep')
+    },
+  })
+
+  pluginManager.registerPlugin('mung', {
+    dependencies: ['dep'],
+    run() {
+      order.push('mung')
+    },
+  })
+
+  // dep starts running from the top level before mung asks for it.
+  await pluginManager.enablePlugins(['dep', 'mung'])
+  await pluginManager.run()
+
+  expect(order).toEqual(['dep', 'mung'])
+})
+
 test('run() does not wait for an optional dependency that is not enabled', async () => {
   const mung = vi.fn()
 

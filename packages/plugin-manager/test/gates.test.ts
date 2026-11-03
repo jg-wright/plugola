@@ -96,6 +96,28 @@ describe('gates', () => {
     expect(events).toEqual(['tracking invoked', 'started'])
   })
 
+  test('a dependency enabled after its dependent runs once', async () => {
+    const pm = manager({ gates: [async () => true] })
+    const runs: string[] = []
+    pm.registerPlugin('bar', {
+      dependencies: ['foo'],
+      run: () => {
+        runs.push('bar')
+      },
+    })
+    pm.registerPlugin('foo', {
+      run: () => {
+        runs.push('foo')
+      },
+    })
+
+    // Enables foo as bar's dependency, so it comes after bar in the enabled set.
+    await pm.enablePlugins(['bar'])
+    await pm.run({ onStarted: () => runs.push('started') })
+
+    expect(runs).toEqual(['foo', 'started', 'bar'])
+  })
+
   test('a plugin is not enabled when its dependency is refused', async () => {
     const pm = manager({ gates: [allowVendors()] })
     const enable = vi.fn()

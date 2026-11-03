@@ -142,7 +142,7 @@ export default class PluginManager<
     string,
     { source: Plugin; optional: boolean }[]
   >()
-  #ran = new WeakSet<Plugin>()
+  #runs = new WeakMap<Plugin, PluginRun>()
   #abortControllers = new WeakMap<Plugin, AbortController>()
   #pendingBatches = new Set<Set<string>>()
   #enabledPlugins = new Set<string>()
@@ -400,21 +400,11 @@ export default class PluginManager<
 
     // Only plugins that don't wait on another plugin's run count towards
     // `onStarted`; waiting on the rest could deadlock (see RunOptions).
-    const [starting, running] = plugins.reduce<
-      [starting: Promise<void>[], running: Promise<void>[]]
-    >(
-      ([starting, running], plugin) => {
-        if (this.#hasEnabledRunDependency(plugin)) {
-          running.push(this.#runPlugin(plugin))
-        } else {
-          const { promise, resolve: started } = Promise.withResolvers<void>()
-          starting.push(promise)
-          running.push(this.#runPlugin(plugin, new Set(), started))
-        }
-        return [starting, running]
-      },
-      [[], []],
-    )
+    const runs = plugins.map((plugin) => this.#runPlugin(plugin))
+    const starting = runs
+      .filter((_, i) => !this.#hasEnabledRunDependency(plugins[i]!))
+      .map(({ started }) => started)
+    const running = runs.map(({ settled }) => settled)
 
     // Called from here rather than from a plugin's run, so that a throw
     // rejects `run()` instead of being reported as that plugin's error.
@@ -560,7 +550,7 @@ export default class PluginManager<
       else return disabled
     }
     this.#enabledPlugins.delete(plugin.name)
-    this.#ran.delete(plugin)
+    this.#runs.delete(plugin)
     this.#abortControllers.get(plugin)?.abort()
     for (const dep of this.#dependencyGraph.dependencies(plugin))
       disabled += this.#disablePlugin(dep, false) // Never force disable dependencies
@@ -604,7 +594,7 @@ export default class PluginManager<
         'abort',
         () => {
           this.#enabledPlugins.delete(plugin.name)
-          this.#ran.delete(plugin)
+          this.#runs.delete(plugin)
           this.#abortControllers.delete(plugin)
         },
         { once: true },
@@ -682,23 +672,40 @@ export default class PluginManager<
    * (before it settles) or the plugin has been skipped, and possibly again
    * afterwards, so it must be idempotent and must not throw.
    */
-  async #runPlugin(
-    plugin: Plugin,
-    path: Set<Plugin> = new Set(),
-    started?: () => void,
-  ) {
+  /**
+   * Runs a plugin once, after its dependencies, and returns that run to every
+   * caller — the top-level {@link PluginManager.run} and the plugins depending
+   * on it share one run, so its hook is never invoked twice.
+   */
+  #runPlugin(plugin: Plugin, path: Set<Plugin> = new Set()): PluginRun {
+    if (path.has(plugin))
+      throw new Error(
+        `Circular dependency detected: ${[...path, plugin]
+          .map((p) => p.name)
+          .join(' -> ')}`,
+      )
+
+    let run = this.#runs.get(plugin)
+    if (!run) {
+      const { promise: started, resolve: start } = Promise.withResolvers<void>()
+      run = {
+        started,
+        settled: this.#executeRun(plugin, new Set(path).add(plugin), start),
+      }
+      this.#runs.set(plugin, run)
+    }
+    return run
+  }
+
+  /**
+   * @param start - Called as soon as the plugin's `run` hook has been invoked
+   * (before it settles), or once the plugin has been skipped.
+   */
+  async #executeRun(plugin: Plugin, path: Set<Plugin>, start: () => void) {
     try {
-      if (path.has(plugin))
-        throw new Error(
-          `Circular dependency detected: ${[...path, plugin]
-            .map((p) => p.name)
-            .join(' -> ')}`,
-        )
+      await this.#runDependencies(plugin, path)
 
-      const nextPath = new Set(path).add(plugin)
-      await this.#runDependencies(plugin, nextPath)
-
-      if (this.#ran.has(plugin) || !plugin.run) return
+      if (!plugin.run) return
 
       // A dependency may have been refused by a gate, or this plugin disabled,
       // while its dependencies ran.
@@ -716,22 +723,20 @@ export default class PluginManager<
       const { signal } = this.#abortController(plugin)
       if (signal.aborted) return
 
-      this.#ran.add(plugin)
-
       try {
         const running = this.#pluginRace(
           plugin,
           () => plugin.run!(this.#createRunContext(plugin, signal)),
           this.#options.pluginTimeout,
         )
-        started?.()
+        start()
         await running
       } catch (error) {
         // Isolate the failure so sibling plugins still run.
         this.#reportPluginError(error, plugin, 'run')
       }
     } finally {
-      started?.()
+      start()
     }
   }
 
@@ -770,11 +775,8 @@ export default class PluginManager<
 
     const promises: Promise<void>[] = []
     for (const dependency of dependencies)
-      if (
-        !this.#ran.has(dependency) &&
-        this.#enabledPlugins.has(dependency.name)
-      )
-        promises.push(this.#runPlugin(dependency, path))
+      if (this.#enabledPlugins.has(dependency.name))
+        promises.push(this.#runPlugin(dependency, path).settled)
 
     await Promise.all(promises)
   }
@@ -816,3 +818,9 @@ export default class PluginManager<
 }
 
 type ManagedPlugin<PluginMeta extends object> = Plugin<any, any> & PluginMeta
+
+/** One plugin's run: when its hook was invoked (or skipped), and when it settled. */
+interface PluginRun {
+  started: Promise<void>
+  settled: Promise<void>
+}
