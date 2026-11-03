@@ -654,12 +654,20 @@ export default class PluginManager<
     return true
   }
 
+  /**
+   * Gates run one after another, in the order they were added, over the live
+   * set: a gate added while an earlier one is still deciding is checked too, so
+   * a gate can wait for other plugins to add theirs.
+   */
   async #passesGates(plugin: Plugin, phase: GatePhase) {
     try {
-      const results = await Promise.all(
-        Array.from(this.#gates, (gate) => gate(plugin, phase)),
-      )
-      if (results.every(Boolean)) return true
+      let passes = true
+      for (const gate of this.#gates)
+        if (!(await gate(plugin, phase))) {
+          passes = false
+          break
+        }
+      if (passes) return true
     } catch (error) {
       this.#reportPluginError(error, plugin, phase)
     }

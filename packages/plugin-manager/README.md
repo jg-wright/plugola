@@ -83,13 +83,9 @@ const pluginManager = new PluginManager({
     sessionStorage,
   }),
   // Merged into the enable context only:
-  addEnableContext: () => ({
-    /* … */
-  }),
+  addEnableContext: () => ({/* … */}),
   // Merged into the run context only:
-  addRunContext: () => ({
-    /* … */
-  }),
+  addRunContext: () => ({/* … */}),
 })
 
 pluginManager.registerPlugin('session-depth', {
@@ -258,7 +254,10 @@ pluginManager.registerPlugin('analytics', { vendorIds: [77], run() {} })
 Gates can also be added later with `addGate`, including from a plugin's
 `enable` hook, in which case the gate is removed when that plugin is disabled.
 A gate only applies from the moment it's added, so plugins that were already
-enabled are next checked before `run`. Call `recheckGates()` to re-evaluate
+enabled are next checked before `run`. Gates run one after another, in the
+order they were added, so a gate added while an earlier gate is still deciding
+is checked too: an early gate can wait for other plugins to finish adding
+theirs. Call `recheckGates()` to re-evaluate
 the enabled plugins immediately, for example when a user withdraws consent.
 
 ```typescript

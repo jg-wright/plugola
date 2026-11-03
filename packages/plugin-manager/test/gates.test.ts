@@ -152,6 +152,30 @@ describe('gates', () => {
     expect(pm.enabledPlugins).toEqual(['cmp'])
   })
 
+  test('a gate added while an earlier gate is deciding is checked too', async () => {
+    const { promise: cmpEnabled, resolve } = Promise.withResolvers<void>()
+    // Waits for the cmp plugin before letting anything else through.
+    const pm = manager({
+      gates: [
+        ({ name }) => (name === 'cmp' ? true : cmpEnabled.then(() => true)),
+      ],
+    })
+    const enable = vi.fn()
+    pm.registerPlugin('cmp', {
+      enable({ addGate }) {
+        addGate(allowVendors())
+        resolve()
+      },
+    })
+    pm.registerPlugin('ads', { vendor: 1, enable })
+
+    // Enabled together: ads starts its gate check before cmp adds its gate.
+    await pm.enablePlugins(['ads', 'cmp'])
+
+    expect(enable).not.toHaveBeenCalled()
+    expect(pm.enabledPlugins).toEqual(['cmp'])
+  })
+
   test('a gate added from a plugin is removed when that plugin is disabled', async () => {
     const pm = manager()
     pm.registerPlugin('cmp', {
