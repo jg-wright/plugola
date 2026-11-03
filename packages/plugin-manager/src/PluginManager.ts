@@ -93,6 +93,9 @@ export interface RunOptions {
    * Plugins that depend on another plugin don't count: their `run` waits for
    * their dependencies' `run` to settle, which may itself wait on whatever
    * this callback releases. They still run once their dependencies have.
+   *
+   * If it throws, {@link PluginManager.run} rejects with that error straight
+   * away; plugins that are already running carry on.
    */
   onStarted?(): void
 }
@@ -397,24 +400,27 @@ export default class PluginManager<
 
     // Only plugins that don't wait on another plugin's run count towards
     // `onStarted`; waiting on the rest could deadlock (see RunOptions).
-    const independent = new Set(
-      plugins.filter((plugin) => !this.#hasEnabledRunDependency(plugin)),
+    const [starting, running] = plugins.reduce<
+      [starting: Promise<void>[], running: Promise<void>[]]
+    >(
+      ([starting, running], plugin) => {
+        if (this.#hasEnabledRunDependency(plugin)) {
+          running.push(this.#runPlugin(plugin))
+        } else {
+          const { promise, resolve: started } = Promise.withResolvers<void>()
+          starting.push(promise)
+          running.push(this.#runPlugin(plugin, new Set(), started))
+        }
+        return [starting, running]
+      },
+      [[], []],
     )
-    let unstarted = independent.size
-    if (!unstarted) onStarted?.()
-    const started = () => {
-      if (--unstarted === 0) onStarted?.()
-    }
 
-    await Promise.all(
-      plugins.map((plugin) =>
-        this.#runPlugin(
-          plugin,
-          new Set(),
-          independent.has(plugin) ? started : undefined,
-        ),
-      ),
-    )
+    // Called from here rather than from a plugin's run, so that a throw
+    // rejects `run()` instead of being reported as that plugin's error.
+    if (onStarted) running.push(Promise.all(starting).then(onStarted))
+
+    await Promise.all(running)
   }
 
   /** Enable every registered plugin. */
@@ -672,16 +678,15 @@ export default class PluginManager<
   }
 
   /**
-   * @param onStarted - Called once, as soon as the plugin's `run` hook has been
-   * invoked (before it settles) or the plugin has been skipped.
+   * @param started - Called as soon as the plugin's `run` hook has been invoked
+   * (before it settles) or the plugin has been skipped, and possibly again
+   * afterwards, so it must be idempotent and must not throw.
    */
   async #runPlugin(
     plugin: Plugin,
     path: Set<Plugin> = new Set(),
-    onStarted?: () => void,
+    started?: () => void,
   ) {
-    const started = once(onStarted)
-
     try {
       if (path.has(plugin))
         throw new Error(
@@ -719,14 +724,14 @@ export default class PluginManager<
           () => plugin.run!(this.#createRunContext(plugin, signal)),
           this.#options.pluginTimeout,
         )
-        started()
+        started?.()
         await running
       } catch (error) {
         // Isolate the failure so sibling plugins still run.
         this.#reportPluginError(error, plugin, 'run')
       }
     } finally {
-      started()
+      started?.()
     }
   }
 
@@ -811,12 +816,3 @@ export default class PluginManager<
 }
 
 type ManagedPlugin<PluginMeta extends object> = Plugin<any, any> & PluginMeta
-
-function once(fn?: () => void) {
-  let called = false
-  return () => {
-    if (called) return
-    called = true
-    fn?.()
-  }
-}

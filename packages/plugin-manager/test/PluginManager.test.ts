@@ -301,6 +301,25 @@ describe('run() onStarted', () => {
     expect(onPluginError).toHaveBeenCalledOnce()
   })
 
+  test('a throw rejects run() rather than being reported as a plugin error', async () => {
+    const onPluginError = vi.fn()
+    pluginManager = new PluginManager({ onPluginError })
+
+    pluginManager.registerPlugin('foo', { run() {} })
+    pluginManager.registerPlugin('bar', {})
+
+    await pluginManager.enableAllPlugins()
+    await expect(
+      pluginManager.run({
+        onStarted() {
+          throw new Error('boom')
+        },
+      }),
+    ).rejects.toThrow('boom')
+
+    expect(onPluginError).not.toHaveBeenCalled()
+  })
+
   test('is called when there are no enabled plugins', async () => {
     const onStarted = vi.fn()
 
