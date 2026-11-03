@@ -176,6 +176,15 @@ describe('gates', () => {
     expect(pm.enabledPlugins).toEqual(['cmp'])
   })
 
+  test('checkGates asks about a plugin-like object without reporting it', async () => {
+    const onPluginGated = vi.fn()
+    const pm = manager({ gates: [allowVendors(1)], onPluginGated })
+
+    expect(await pm.checkGates({ name: 'google', vendor: 1 })).toBe(true)
+    expect(await pm.checkGates({ name: 'google', vendor: 2 })).toBe(false)
+    expect(onPluginGated).not.toHaveBeenCalled()
+  })
+
   test('a gate added from a plugin is removed when that plugin is disabled', async () => {
     const pm = manager()
     pm.registerPlugin('cmp', {

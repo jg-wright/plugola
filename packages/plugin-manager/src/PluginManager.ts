@@ -183,13 +183,21 @@ export default class PluginManager<
   }
 
   /**
-   * Whether the named plugin currently passes every gate.
+   * Whether a plugin currently passes every gate. Pass a plugin's name, or a
+   * plugin-like object to ask whether something with that metadata would (for
+   * example, whether a vendor is consented to) — that check is not reported to
+   * `onPluginGated`.
    *
-   * @param pluginName - The plugin to check.
+   * @param plugin - The plugin to check, or its name.
    * @param phase - The phase the gates are told the check is for.
    */
-  async checkGates(pluginName: string, phase: GatePhase = 'enable') {
-    return this.#passesGates(this.#getPlugin(pluginName), phase)
+  async checkGates(
+    plugin: string | ManagedPlugin<PluginMeta>,
+    phase: GatePhase = 'enable',
+  ) {
+    return typeof plugin === 'string'
+      ? this.#passesGates(this.#getPlugin(plugin), phase)
+      : this.#passesGates(plugin, phase, { report: false })
   }
 
   /**
@@ -659,7 +667,11 @@ export default class PluginManager<
    * set: a gate added while an earlier one is still deciding is checked too, so
    * a gate can wait for other plugins to add theirs.
    */
-  async #passesGates(plugin: Plugin, phase: GatePhase) {
+  async #passesGates(
+    plugin: Plugin,
+    phase: GatePhase,
+    { report = true }: { report?: boolean } = {},
+  ) {
     try {
       let passes = true
       for (const gate of this.#gates)
@@ -669,9 +681,11 @@ export default class PluginManager<
         }
       if (passes) return true
     } catch (error) {
+      if (!report) throw error
       this.#reportPluginError(error, plugin, phase)
     }
-    this.#options.onPluginGated?.(plugin as ManagedPlugin<PluginMeta>, phase)
+    if (report)
+      this.#options.onPluginGated?.(plugin as ManagedPlugin<PluginMeta>, phase)
     return false
   }
 
@@ -801,7 +815,8 @@ export default class PluginManager<
           removeGate()
         }
       },
-      checkGates: (pluginName: string) => this.checkGates(pluginName),
+      checkGates: (plugin: string | ManagedPlugin<PluginMeta>) =>
+        this.checkGates(plugin),
       ...this.#createContext(plugin, signal),
       ...(this.#options.addEnableContext?.(plugin.name, { signal }) || {}),
     }

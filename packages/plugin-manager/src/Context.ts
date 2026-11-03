@@ -45,9 +45,12 @@ export interface EnableContext {
    */
   addGate(gate: Gate<any>): () => void
   /**
-   * Whether the named plugin currently passes every gate.
+   * Whether a plugin, by name, or a plugin-like object currently passes every
+   * gate.
    */
-  checkGates(pluginName: string): Promise<boolean>
+  checkGates(
+    plugin: string | ({ name: string } & Record<string, unknown>),
+  ): Promise<boolean>
 }
 
 /**

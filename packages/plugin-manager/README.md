@@ -322,19 +322,19 @@ Options ([`PluginManagerOptions`](src/PluginManager.ts)):
 
 ### Methods & properties
 
-| Member                                                    | Description                                           |
-| --------------------------------------------------------- | ----------------------------------------------------- |
-| `registerPlugin(plugin)` / `registerPlugin(name, plugin)` | Register a plugin.                                    |
-| `enablePlugins(names)`                                    | Enable the named plugins and their dependencies.      |
-| `enableAllPlugins()`                                      | Enable every registered plugin.                       |
-| `disablePlugins(names, force?)`                           | Disable plugins; returns the count removed.           |
-| `disableAllPlugins()`                                     | Disable every registered plugin.                      |
-| `run({ onStarted? })`                                     | Run the `run` hook of every enabled plugin.           |
-| `addGate(gate)`                                           | Add a gate; returns a function that removes it.       |
-| `checkGates(name)`                                        | Whether a plugin currently passes every gate.         |
-| `recheckGates()`                                          | Disable enabled plugins that no longer pass a gate.   |
-| `withOptions(options)`                                    | Sibling manager sharing plugins, new context/options. |
-| `enabledPlugins`                                          | Array of currently enabled plugin names.              |
+| Member                                                    | Description                                                 |
+| --------------------------------------------------------- | ----------------------------------------------------------- |
+| `registerPlugin(plugin)` / `registerPlugin(name, plugin)` | Register a plugin.                                          |
+| `enablePlugins(names)`                                    | Enable the named plugins and their dependencies.            |
+| `enableAllPlugins()`                                      | Enable every registered plugin.                             |
+| `disablePlugins(names, force?)`                           | Disable plugins; returns the count removed.                 |
+| `disableAllPlugins()`                                     | Disable every registered plugin.                            |
+| `run({ onStarted? })`                                     | Run the `run` hook of every enabled plugin.                 |
+| `addGate(gate)`                                           | Add a gate; returns a function that removes it.             |
+| `checkGates(nameOrPlugin)`                                | Whether a plugin (or plugin-like object) passes every gate. |
+| `recheckGates()`                                          | Disable enabled plugins that no longer pass a gate.         |
+| `withOptions(options)`                                    | Sibling manager sharing plugins, new context/options.       |
+| `enabledPlugins`                                          | Array of currently enabled plugin names.                    |
 
 ### Exported types
 
