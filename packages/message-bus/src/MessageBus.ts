@@ -12,7 +12,7 @@ import type {
 import { getOrInsert } from './lang/Map.ts'
 import { chain, isPromiseLike } from './lang/chain.ts'
 import { Queuable } from '@plugola/queue'
-import { type Dispatcher, dispatchImmediately } from './Roles/Dispatcher.ts'
+import type { BusEvent, BusObserver } from './Roles/Observer.ts'
 
 /**
  * The message bus: the shared hub the host owns. It hands out a
@@ -36,12 +36,15 @@ import { type Dispatcher, dispatchImmediately } from './Roles/Dispatcher.ts'
  */
 export class MessageBus extends Queuable {
   /**
-   * Schedules each delivery of a message to a subscriber. Swappable at runtime;
-   * defaults to delivering immediately.
+   * Receives a responder's error when `gateway.invoke` is given no `onError`.
+   * Defaults to rethrowing, which fails the invoke's stream.
    */
-  dispatcher: Dispatcher
+  readonly onResponderError: ResponderErrorHandler
 
-  readonly emit: <M extends Message>(message: M) => Promise<M | typeof CANCEL>
+  readonly emit: <M extends Message>(
+    message: M,
+    from?: string,
+  ) => Promise<M | typeof CANCEL>
 
   readonly invoke: <T>(
     command: CommandMessage<T>,
@@ -50,10 +53,10 @@ export class MessageBus extends Queuable {
   ) => Promise<void>
 
   constructor({
-    dispatcher = dispatchImmediately,
-  }: { dispatcher?: Dispatcher } = {}) {
+    onResponderError = rethrow,
+  }: { onResponderError?: ResponderErrorHandler } = {}) {
     super()
-    this.dispatcher = dispatcher
+    this.onResponderError = onResponderError
     this.emit = this.queue.queueMethod(this.#emit)
     this.invoke = this.queue.queueMethod(this.#invoke)
   }
@@ -65,6 +68,31 @@ export class MessageBus extends Queuable {
   readonly #responderRoutes = new Map<CommandMessageFactory, Set<string>>()
 
   readonly #interceptorRoutes = new Map<MessageFactory, Set<string>>()
+
+  readonly #observers = new Set<BusObserver>()
+
+  /**
+   * Calls `observer` with every {@link BusEvent}: each message as it is
+   * emitted, cancelled by an interceptor, delivered to a participant's
+   * subscribers, or handed to a participant's responders. For tracing and
+   * tests; an observer can't change what happens.
+   *
+   * @returns a disposer that removes the observer.
+   */
+  observe(observer: BusObserver) {
+    this.#observers.add(observer)
+    return () => {
+      this.#observers.delete(observer)
+    }
+  }
+
+  /**
+   * Tells every observer about an event.
+   * @internal
+   */
+  readonly notify = (event: BusEvent) => {
+    for (const observer of this.#observers) observer(event)
+  }
 
   /**
    * Records that a participant is interested in a message class so
@@ -163,7 +191,10 @@ export class MessageBus extends Queuable {
    */
   readonly #emit = async <M extends Message>(
     message: M,
+    from?: string,
   ): Promise<M | typeof CANCEL> => {
+    this.notify({ type: 'emit', message, from })
+
     const interceptorNames = [
       ...(this.#interceptorRoutes.get(message.$factory) ?? []),
     ]
@@ -173,7 +204,10 @@ export class MessageBus extends Queuable {
       this.#participants.get(name)?.dispatcher.runInterceptors(message),
     )
     const result = isPromiseLike(intercepted) ? await intercepted : intercepted
-    if (result === CANCEL) return CANCEL
+    if (result === CANCEL) {
+      this.notify({ type: 'cancel', message })
+      return CANCEL
+    }
     message = result
 
     const subscriberNames = this.#subscriberRoutes.get(message.$factory)
@@ -260,4 +294,8 @@ export class MessageBus extends Queuable {
       this.pause()
     }
   }
+}
+
+function rethrow(error: unknown): never {
+  throw error
 }

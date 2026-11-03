@@ -15,13 +15,9 @@ export class SelectivePerformer<
   readonly #filterEntries: FilterEntries<M>
   readonly #performer: P
 
-  /** Whether to bypass the bus's {@link Dispatcher}. */
-  readonly sync: boolean
-
-  constructor(filter: Filter<M>, performer: P, { sync = false } = {}) {
+  constructor(filter: Filter<M>, performer: P) {
     this.#filterEntries = Object.entries(filter) as FilterEntries<M>
     this.#performer = performer
-    this.sync = sync
   }
 
   perform(...args: Parameters<P>): void | ReturnType<P> {

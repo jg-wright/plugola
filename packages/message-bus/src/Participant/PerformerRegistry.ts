@@ -1,6 +1,6 @@
 import type { MessageFactory } from '../Message/Message.ts'
 import type { CommandMessageFactory } from '../Message/CommandMessage.ts'
-import type { SubscribeOptions, Subscriber } from '../Roles/Subscriber.ts'
+import type { Subscriber } from '../Roles/Subscriber.ts'
 import type { Interceptor } from '../Roles/Interceptor.ts'
 import type { Responder } from '../Roles/Responder.ts'
 import type { Filter } from '../Filter.ts'
@@ -25,8 +25,7 @@ export class PerformerRegistry {
     messageFactory: M,
     filter: Filter<M>,
     subscriber: Subscriber<M>,
-    options?: SubscribeOptions,
-  ) => this.#add(this.#subscribers, messageFactory, filter, subscriber, options)
+  ) => this.#add(this.#subscribers, messageFactory, filter, subscriber)
 
   readonly addResponder = <E extends CommandMessageFactory>(
     commandFactory: E,
@@ -79,10 +78,9 @@ export class PerformerRegistry {
     messageFactory: M,
     filter: Filter<M>,
     perform: Performer<M>,
-    options?: SubscribeOptions,
   ): () => boolean {
     const performers = getOrInsert(registry, messageFactory, new Set())
-    const performer = new SelectivePerformer(filter, perform, options)
+    const performer = new SelectivePerformer(filter, perform)
     performers.add(performer)
 
     return () => {
@@ -95,10 +93,5 @@ export class PerformerRegistry {
 export interface PerformerRegistrator<
   M extends MessageFactory = MessageFactory,
 > {
-  (
-    messageFactory: M,
-    filter: Filter<M>,
-    responder: Performer<M>,
-    options?: SubscribeOptions,
-  ): () => boolean
+  (messageFactory: M, filter: Filter<M>, responder: Performer<M>): () => boolean
 }

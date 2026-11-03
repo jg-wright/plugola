@@ -6,7 +6,7 @@ import type {
 } from '../Message/CommandMessage.ts'
 import { CANCEL } from '../Roles/Interceptor.ts'
 import type { Interceptor } from '../Roles/Interceptor.ts'
-import type { SubscribeOptions, Subscriber } from '../Roles/Subscriber.ts'
+import type { Subscriber } from '../Roles/Subscriber.ts'
 import type {
   Responder,
   ResponderContext,
@@ -57,7 +57,7 @@ export class MessageGateway {
     this.#participant = participant
     this.#bus = bus
     this.emit = participant.queue.queueMethod(<M extends Message>(message: M) =>
-      bus.emit(message),
+      bus.emit(message, participant.name),
     )
   }
 
@@ -120,7 +120,6 @@ export class MessageGateway {
   on<M extends MessageFactory>(
     messageFactory: M,
     subscriber: Subscriber<M>,
-    options?: SubscribeOptions,
   ): () => void
 
   /**
@@ -131,21 +130,19 @@ export class MessageGateway {
     messageFactory: M,
     filter: Filter<M>,
     subscriber: Subscriber<M>,
-    options?: SubscribeOptions,
   ): () => void
 
   on<M extends MessageFactory>(
     messageFactory: M,
-    ...args: SubscribeArgs<M>
+    filterOrSubscriber: Filter<M> | Subscriber<M>,
+    subscriber?: Subscriber<M>,
   ): () => void {
-    const { filter, subscriber, options } = parseSubscribeArgs(args)
     return this.#addPerformer(
       this.#participant.registry.addSubscriber as PerformerRegistrator,
       this.#bus.on,
       messageFactory,
-      filter,
+      filterOrSubscriber,
       subscriber,
-      options,
     )
   }
 
@@ -158,7 +155,6 @@ export class MessageGateway {
   once<M extends MessageFactory>(
     messageFactory: M,
     subscriber: Subscriber<M>,
-    options?: SubscribeOptions,
   ): () => void
 
   /** Fires once for the first message matching `filter`, then unsubscribes. */
@@ -166,28 +162,24 @@ export class MessageGateway {
     messageFactory: M,
     filter: Filter<M>,
     subscriber: Subscriber<M>,
-    options?: SubscribeOptions,
   ): () => void
 
   once<M extends MessageFactory>(
     messageFactory: M,
-    ...args: SubscribeArgs<M>
+    filterOrSubscriber: Filter<M> | Subscriber<M>,
+    subscriber?: Subscriber<M>,
   ): () => void {
-    const { filter, subscriber, options } = parseSubscribeArgs(args)
-    // A scheduled dispatcher may queue several deliveries before the first
-    // runs, so guard against firing more than once.
+    const filter = (subscriber ? filterOrSubscriber : {}) as Filter<M>
+    const fire = subscriber ?? (filterOrSubscriber as Subscriber<M>)
+    // Guards against a message emitted from within the subscriber, which is
+    // delivered before `off` takes effect.
     let fired = false
-    const off = this.on(
-      messageFactory,
-      filter,
-      (message) => {
-        if (fired) return
-        fired = true
-        off()
-        return subscriber(message)
-      },
-      options,
-    )
+    const off = this.on(messageFactory, filter, (message) => {
+      if (fired) return
+      fired = true
+      off()
+      return fire(message)
+    })
     return off
   }
 
@@ -331,9 +323,7 @@ export class MessageGateway {
     command: E,
     {
       signal,
-      onError = (error) => {
-        throw error
-      },
+      onError = this.#bus.onResponderError,
     }: {
       signal?: AbortSignal
       onError?: ResponderErrorHandler
@@ -378,38 +368,17 @@ export class MessageGateway {
     messageFactory: M,
     filterOrPerformer: Filter<M> | P,
     performer?: P,
-    options?: SubscribeOptions,
   ) {
     const filter = (performer ? filterOrPerformer : {}) as Filter<M>
     performer ??= filterOrPerformer as P
 
-    const removePerformer = add(messageFactory, filter, performer, options)
+    const removePerformer = add(messageFactory, filter, performer)
     const unregister = subscribe(this.name, messageFactory)
 
     return () => {
       if (removePerformer()) unregister()
     }
   }
-}
-
-type SubscribeArgs<M extends MessageFactory> =
-  | [subscriber: Subscriber<M>, options?: SubscribeOptions]
-  | [filter: Filter<M>, subscriber: Subscriber<M>, options?: SubscribeOptions]
-
-function parseSubscribeArgs<M extends MessageFactory>(
-  args: SubscribeArgs<M>,
-): {
-  filter: Filter<M>
-  subscriber: Subscriber<M>
-  options?: SubscribeOptions
-} {
-  return typeof args[0] === 'function'
-    ? { filter: {}, subscriber: args[0], options: args[1] as SubscribeOptions }
-    : {
-        filter: args[0],
-        subscriber: args[1] as Subscriber<M>,
-        options: args[2],
-      }
 }
 
 class ResponseSource<E extends CommandMessage> {

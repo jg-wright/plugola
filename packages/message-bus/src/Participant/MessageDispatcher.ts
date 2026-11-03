@@ -29,15 +29,17 @@ export class MessageDispatcher {
 
   readonly #participant: Participant
 
+  readonly #bus: MessageBus
+
   constructor(participant: Participant, bus: MessageBus) {
     this.#participant = participant
+    this.#bus = bus
 
     this.dispatch = participant.queue.queueMethod((message: Message) => {
-      for (const performer of [
-        ...(participant.registry.subscribersFor(message.$factory) ?? []),
-      ])
-        if (performer.sync) performer.perform(message)
-        else bus.dispatcher(() => performer.perform(message))
+      const subscribers = participant.registry.subscribersFor(message.$factory)
+      if (!subscribers?.size) return
+      bus.notify({ type: 'deliver', message, to: participant.name })
+      for (const performer of [...subscribers]) performer.perform(message)
     })
   }
 
@@ -82,6 +84,12 @@ export class MessageDispatcher {
     )
 
     if (!responders?.size) return
+
+    this.#bus.notify({
+      type: 'respond',
+      message: command,
+      to: this.#participant.name,
+    })
 
     await Promise.all(
       [...responders].map(async (performer) => {

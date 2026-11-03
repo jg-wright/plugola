@@ -117,23 +117,6 @@ TransportableMessageRegistry.create()
   .as<{ el: HTMLElement }>() // ⛔ HTMLElement isn't serializable
 ```
 
-## Scheduling delivery
-
-By default a subscriber runs as soon as its message is delivered. Pass a
-`dispatcher` to schedule each delivery instead, for example to yield to the main
-thread between subscribers. It can also be swapped at runtime. Subscribers
-registered with `{ sync: true }` always run immediately.
-
-```typescript
-const bus = new MessageBus({
-  dispatcher: (deliver) => requestIdleCallback(deliver),
-})
-
-gateway.on(Greeting, render, { sync: true })
-
-bus.dispatcher = (deliver) => deliver()
-```
-
 ## Filtering subscriptions
 
 Pass a filter to narrow a subscription to the messages you care about. A filter
@@ -242,6 +225,28 @@ const files = await app
     onError: (error) => console.warn('a file source failed', error),
   })
   .collect()
+```
+
+To isolate responders on every invoke that doesn't pass its own `onError`,
+give the bus an `onResponderError`:
+
+```typescript
+const bus = new MessageBus({
+  onResponderError: (error) => console.error(error),
+})
+```
+
+## Observing the bus
+
+`bus.observe` sees every message as it is emitted (with the sender's name),
+cancelled by an interceptor, delivered to a participant's subscribers, or handed
+to a participant's responders. Useful for tracing and for asserting on traffic
+in tests; an observer can't change what happens.
+
+```typescript
+const stop = bus.observe((event) => {
+  if (event.type === 'emit') console.log(event.from, '→', event.message.$name)
+})
 ```
 
 ## Pausing and lifecycle
