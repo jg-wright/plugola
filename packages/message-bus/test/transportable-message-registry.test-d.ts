@@ -4,10 +4,11 @@
 
 import { expectTypeOf } from 'vitest'
 import { TransportableMessageRegistry } from '../src/MessageRegistry/TransportableMessageRegistry.ts'
-import type { MessageFactory } from '../src/Message/Message.ts'
-import type {
-  CommandMessageFactory,
-  ResponseType,
+import { message, type MessageFactory } from '../src/Message/Message.ts'
+import {
+  command,
+  type CommandMessageFactory,
+  type ResponseType,
 } from '../src/Message/CommandMessage.ts'
 import type { Transportable } from '../src/Message/Transportable.ts'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
@@ -49,3 +50,31 @@ export async function assertRegisteredCommandResponse(gateway: MessageGateway) {
     expectTypeOf(send).toEqualTypeOf<(value: string) => void>()
   })
 }
+
+// addMessage()/addCommand() adopt factories defined elsewhere. One with a literal
+// name is typed in the registry's maps; one whose name widened to `string`
+// (`message<T>('x')`) adds nothing to them but is still accepted.
+// `command()` keeps a literal name; `message()` widens it unless cast.
+const Literal = message('literal') as MessageFactory<{ x: number }, 'literal'>
+const Widened = message<{ y: number }>('widened')
+const Asked = command<{ q: string }, number, 'asked'>('asked')
+const adopted = TransportableMessageRegistry.create()
+  .addMessage(Literal)
+  .addMessage(Widened)
+  .addCommand(Asked)
+expectTypeOf(adopted.messages.literal).toExtend<
+  MessageFactory<{ x: number }> & Transportable<{ x: number }>
+>()
+expectTypeOf(adopted.commands.asked).toExtend<
+  CommandMessageFactory<number, { q: string }>
+>()
+expectTypeOf<keyof typeof adopted.messages>().toEqualTypeOf<'literal'>()
+
+// A payload that can't cross the wire as-is needs a codec, as with message().as().
+const Dated = message<{ at: Date }>('dated')
+// @ts-expect-error A Date payload is not Serializable, so a codec is required.
+TransportableMessageRegistry.create().addMessage(Dated)
+TransportableMessageRegistry.create().addMessage(Dated, {
+  encode: (m) => ({ at: m.at.toISOString() }),
+  decode: (p) => Dated({ at: new Date(p.at) }),
+})
