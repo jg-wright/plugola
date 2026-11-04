@@ -24,4 +24,8 @@ export * from './MessageRegistry/TransportableMessageRegistry.ts'
 export * from './Channel/Channel.ts'
 export { LoopbackChannel } from './Channel/LoopbackChannel.ts'
 export { PortChannel, type PortLike } from './Channel/PortChannel.ts'
+export {
+  PostMessageChannel,
+  type PostMessageEndpoint,
+} from './Channel/PostMessageChannel.ts'
 export * from './Bridge/MessagingBridge.ts'
