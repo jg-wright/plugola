@@ -1,55 +1,44 @@
 name: Release
 
-on:
-  push:
-    branches: [master]
+# Publishes a package to npm whenever release-please (release-please.yml)
+# creates its GitHub release. Dispatch by hand with a tag to retry a failed
+# publish. This file name is registered as the npm trusted publisher.
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, e.g. logger-v5.0.4
+        required: true
 
 concurrency:
-  group: release
+  group: publish-${{ github.event.release.tag_name || inputs.tag }}
 
 jobs:
-  release-github:
-    outputs:
-      paths: ${{ steps.release-please.outputs.paths_released }}
-      releases_created: ${{ steps.release-please.outputs.releases_created }}
-    runs-on: ubuntu-latest
-    steps:
-      - id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ secrets.APP_CLIENT_ID }}
-          private-key: ${{ secrets.APP_PEM }}
-          permission-contents: write
-          permission-issues: write
-          permission-pull-requests: write
-      - id: release-please
-        uses: googleapis/release-please-action@v5
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-
   npm:
-    needs: release-github
-    if: needs.release-github.outputs.releases_created == 'true'
     runs-on: ubuntu-latest
     environment: npm
-    strategy:
-      matrix:
-        path: ${{ fromJson(needs.release-github.outputs.paths) }}
     permissions:
       contents: read
       id-token: write
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG }}
+      - id: parser
+        uses: jg-wright/regex-action@v2.0.2
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          regex: ^refs/tags/(?P<package>[a-zA-Z0-9_-]+)-v(?P<version>\d+\.\d+\.\d+)$
       - uses: actions/setup-node@v6
         with:
           cache: npm
           node-version-file: .nvmrc
       - run: npm ci
       - run: npm run build
-      - working-directory: ${{ matrix.path }}
+      - working-directory: packages/${{ fromJSON(steps.parser.outputs.groups).package }}
         run: npm publish
