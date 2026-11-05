@@ -1,9 +1,18 @@
 import { PluginManager } from '@plugola/plugin-manager'
 import { afterAll, beforeAll, describe, test } from 'vitest'
-import { TestPlugin } from './TestPlugin.js'
+import type {
+  AnyPluginManager,
+  HostPlugin,
+  TestHostPlugin,
+  TestPlugin,
+} from './TestPlugin.js'
 
-export { TestPlugin }
+export type { AnyPluginManager, HostPlugin, TestHostPlugin, TestPlugin }
 
+/**
+ * Declares a `describe` per entry in `tests`, each enabling then running the
+ * plugin under test alongside that entry's plugins.
+ */
 export function testPlugin<
   TestContext extends Record<string, unknown>,
   PluginContext extends Record<string, unknown>,
@@ -11,55 +20,80 @@ export function testPlugin<
   RunContext extends Record<string, unknown>,
 >(
   testPlugin: TestPlugin<TestContext, PluginContext, EnableContext, RunContext>,
+): void
+
+export function testPlugin<
+  PM extends AnyPluginManager,
+  TestContext extends Record<string, unknown>,
+  PluginContext extends Record<string, unknown>,
+>(testPlugin: TestHostPlugin<PM, TestContext, PluginContext>): void
+
+export function testPlugin(
+  testPlugin:
+    | TestPlugin<any, any, any, any>
+    | TestHostPlugin<AnyPluginManager, any, any>,
 ) {
   for (const [testName, $plugins] of Object.entries(testPlugin.tests)) {
     const plugins = Array.isArray($plugins) ? $plugins : [$plugins]
 
     describe(testName, () => {
-      let testContext: TestContext
-
-      let pluginManager: PluginManager<
-        TestContext & PluginContext,
-        EnableContext,
-        RunContext
-      >
+      let testContext: Record<string, unknown>
+      let pluginManager: AnyPluginManager
+      let pluginNames: string[]
 
       beforeAll(() => {
-        testContext = testPlugin.testContext?.() ?? ({} as TestContext)
+        testContext = testPlugin.testContext?.() ?? {}
+        pluginManager = createPluginManager(testPlugin, () => testContext)
 
-        pluginManager = new PluginManager({
-          addContext(pluginName) {
-            return {
-              ...testContext,
-              ...testPlugin.pluginContext?.(pluginName, testContext),
-            } as TestContext & PluginContext
-          },
-          addEnableContext: testPlugin.enableContext,
-          addRunContext: testPlugin.runContext,
-        })
-
-        pluginManager.registerPlugin(testPlugin.plugin)
+        const { plugin } = testPlugin
+        if (typeof plugin !== 'string') pluginManager.registerPlugin(plugin)
+        pluginNames = [typeof plugin === 'string' ? plugin : plugin.name]
 
         for (let i = 0; i < plugins.length; i++) {
           const plugin = plugins[i]
           const name = plugin.name ?? `test ${i}`
           pluginManager.registerPlugin({ ...plugin, name })
+          pluginNames.push(name)
         }
       })
 
       afterAll(() => pluginManager.disableAllPlugins())
 
       test('init', async () => {
-        const p = pluginManager.enableAllPlugins()
+        const p = pluginManager.enablePlugins(pluginNames)
         if (testPlugin.afterInit) await testPlugin.afterInit(testContext, p)
         else await p
       })
 
       test('run', async () => {
-        const p = pluginManager.run()
+        const { onStarted } = testPlugin
+        const p = pluginManager.run({
+          onStarted: onStarted && (() => onStarted(testContext)),
+        })
         if (testPlugin.afterRun) await testPlugin.afterRun(testContext, p)
         else await p
       })
     })
   }
+}
+
+function createPluginManager(
+  testPlugin:
+    | TestPlugin<any, any, any, any>
+    | TestHostPlugin<AnyPluginManager, any, any>,
+  getTestContext: () => Record<string, unknown>,
+): AnyPluginManager {
+  const addContext = (pluginName: string) => ({
+    ...getTestContext(),
+    ...testPlugin.pluginContext?.(pluginName, getTestContext()),
+  })
+
+  if ('pluginManager' in testPlugin)
+    return testPlugin.pluginManager.withOptions({ addContext })
+
+  return new PluginManager({
+    addContext,
+    addEnableContext: testPlugin.enableContext,
+    addRunContext: testPlugin.runContext,
+  })
 }

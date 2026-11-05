@@ -75,10 +75,7 @@ export class Store<Actions extends BaseActions, Context> {
 
     return () => {
       const index = subscriptions.indexOf(subscription)
-      subscriptions = [
-        ...subscriptions.slice(0, index),
-        ...subscriptions.slice(index + 1),
-      ]
+      if (index !== -1) subscriptions.splice(index, 1)
     }
   }
 

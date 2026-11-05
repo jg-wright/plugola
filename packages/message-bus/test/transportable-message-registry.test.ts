@@ -1,6 +1,8 @@
 import { expect, test, vi } from 'vitest'
 import { TransportableMessageRegistry } from '../src/MessageRegistry/TransportableMessageRegistry.ts'
 import { MessageBus } from '../src/MessageBus.ts'
+import { message } from '../src/Message/Message.ts'
+import { command } from '../src/Message/CommandMessage.ts'
 
 test('message() creates a routable message factory and records it', () => {
   const registry = TransportableMessageRegistry.create()
@@ -115,3 +117,58 @@ test('a duplicate name throws, whether message or command', () => {
   expect(() => registry.message('clicked')).toThrow(/already registered/)
   expect(() => registry.command('clicked')).toThrow(/already registered/)
 })
+
+test('addMessage() adopts an existing factory under its $name and makes it transportable', () => {
+  const Clicked = message<{ x: number }>('clicked')
+  const registry = TransportableMessageRegistry.create().addMessage(Clicked)
+
+  expect(lookup(registry, 'clicked')).toBe(Clicked)
+  expect([...registry.messageFactories]).toEqual([Clicked])
+  expect(lookup(registry, 'clicked').$decode({ x: 1 })).toEqual(
+    Clicked({ x: 1 }),
+  )
+})
+
+test('addCommand() adopts an existing command factory as a command', () => {
+  const ListFiles = command<{ dir: string }, string>('listFiles')
+  const registry = TransportableMessageRegistry.create().addCommand(ListFiles)
+
+  expect([...registry.commandFactories]).toEqual([ListFiles])
+  expect([...registry.messageFactories]).toEqual([])
+})
+
+test('an adopted factory keeps a codec it already has, unless given one', () => {
+  const Clicked = message<{ x: number }>('clicked')
+  const custom = vi.fn(() => ({}))
+  TransportableMessageRegistry.create().addMessage(Clicked, { encode: custom })
+
+  const keeps = TransportableMessageRegistry.create().addMessage(Clicked)
+  expect(lookup(keeps, 'clicked').$encode).toBe(custom)
+
+  const replacement = vi.fn(() => ({}))
+  const replaces = TransportableMessageRegistry.create().addMessage(Clicked, {
+    encode: replacement,
+  })
+  expect(lookup(replaces, 'clicked').$encode).toBe(replacement)
+})
+
+test('addMessage() and addCommand() throw on a name already registered', () => {
+  const registry = TransportableMessageRegistry.create()
+    .message('clicked')
+    .as<{ x: number }>()
+
+  expect(() => registry.addMessage(message('clicked'))).toThrow(
+    /already registered/,
+  )
+  expect(() => registry.addCommand(command('clicked'))).toThrow(
+    /already registered/,
+  )
+})
+
+/** Looks up a factory whose name `message<T>()` widened to `string`, so isn't in the registry's types. */
+function lookup(
+  registry: TransportableMessageRegistry<any, any>,
+  name: string,
+) {
+  return registry.messageFactoryFor(name)
+}

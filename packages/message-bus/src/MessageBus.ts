@@ -10,7 +10,9 @@ import type {
   ResponderErrorHandler,
 } from './Roles/Responder.ts'
 import { getOrInsert } from './lang/Map.ts'
-import type { Runnable } from '@plugola/queue'
+import { chain, isPromiseLike } from './lang/chain.ts'
+import { Queuable } from '@plugola/queue'
+import type { BusEvent, BusObserver } from './Roles/Observer.ts'
 
 /**
  * The message bus: the shared hub the host owns. It hands out a
@@ -32,10 +34,32 @@ import type { Runnable } from '@plugola/queue'
  * b.emit(Ping())
  * ```
  */
-export class MessageBus implements Runnable {
-  #running = false
-  get running() {
-    return this.#running
+export class MessageBus extends Queuable {
+  /**
+   * Receives a responder's error when `gateway.invoke` is given no `onError`.
+   * Defaults to rethrowing, which fails the invoke's stream.
+   */
+  readonly onResponderError: ResponderErrorHandler
+
+  readonly emit: <M extends Message>(
+    message: M,
+    from?: string,
+    options?: { invoked?: boolean },
+  ) => Promise<M | typeof CANCEL>
+
+  readonly invoke: <T>(
+    command: CommandMessage<T>,
+    context: ResponderContext<CommandMessageFactory<T>>,
+    reportError: ResponderErrorHandler,
+  ) => Promise<void>
+
+  constructor({
+    onResponderError = rethrow,
+  }: { onResponderError?: ResponderErrorHandler } = {}) {
+    super()
+    this.onResponderError = onResponderError
+    this.emit = this.queue.queueMethod(this.#emit)
+    this.invoke = this.queue.queueMethod(this.#invoke)
   }
 
   readonly #participants = new Map<string, Participant>()
@@ -45,6 +69,31 @@ export class MessageBus implements Runnable {
   readonly #responderRoutes = new Map<CommandMessageFactory, Set<string>>()
 
   readonly #interceptorRoutes = new Map<MessageFactory, Set<string>>()
+
+  readonly #observers = new Set<BusObserver>()
+
+  /**
+   * Calls `observer` with every {@link BusEvent}: each message as it is
+   * emitted, cancelled by an interceptor, delivered to a participant's
+   * subscribers, or handed to a participant's responders. For tracing and
+   * tests; an observer can't change what happens.
+   *
+   * @returns a disposer that removes the observer.
+   */
+  observe(observer: BusObserver) {
+    this.#observers.add(observer)
+    return () => {
+      this.#observers.delete(observer)
+    }
+  }
+
+  /**
+   * Tells every observer about an event.
+   * @internal
+   */
+  readonly notify = (event: BusEvent) => {
+    for (const observer of this.#observers) observer(event)
+  }
 
   /**
    * Records that a participant is interested in a message class so
@@ -109,7 +158,6 @@ export class MessageBus implements Runnable {
    * facade — the object a participant uses to subscribe, emit, and invoke. Names
    * are unique for the bus's lifetime; a name frees up again once its participant
    * is aborted.
-   *
    * @throws if a participant with `name` is already registered.
    */
   gateway(name: string, abortSignal?: AbortSignal) {
@@ -129,7 +177,7 @@ export class MessageBus implements Runnable {
         for (const names of routes.values()) names.delete(name)
     })
 
-    if (this.#running) participant.resume()
+    if (this.running) participant.resume()
 
     return participant.gateway
   }
@@ -142,21 +190,32 @@ export class MessageBus implements Runnable {
    * sender's queue; this is the bus-level primitive it calls.
    * @internal
    */
-  async emit<M extends Message>(message: M): Promise<M | typeof CANCEL> {
-    const interceptorNames = this.#interceptorRoutes.get(message.$factory) ?? []
+  readonly #emit = async <M extends Message>(
+    message: M,
+    from?: string,
+    { invoked = false }: { invoked?: boolean } = {},
+  ): Promise<M | typeof CANCEL> => {
+    this.notify({ type: 'emit', message, from, invoked })
 
-    for (const name of interceptorNames) {
-      const result = await this.#participants
-        .get(name)
-        ?.dispatcher.runInterceptors(message)
-      if (result === CANCEL) return CANCEL
-      else if (result) message = result as M
+    const interceptorNames = [
+      ...(this.#interceptorRoutes.get(message.$factory) ?? []),
+    ]
+
+    // Interceptors that return synchronously keep delivery synchronous.
+    const intercepted = chain(interceptorNames, message, (name, message) =>
+      this.#participants.get(name)?.dispatcher.runInterceptors(message),
+    )
+    const result = isPromiseLike(intercepted) ? await intercepted : intercepted
+    if (result === CANCEL) {
+      this.notify({ type: 'cancel', message })
+      return CANCEL
     }
+    message = result
 
     const subscriberNames = this.#subscriberRoutes.get(message.$factory)
     if (!subscriberNames?.size) return message
 
-    for (const name of subscriberNames)
+    for (const name of [...subscriberNames])
       this.#participants.get(name)?.dispatcher.dispatch(message)
 
     return message
@@ -171,11 +230,11 @@ export class MessageBus implements Runnable {
    * primitive it calls.
    * @internal
    */
-  async invoke<T>(
+  readonly #invoke = async <T>(
     command: CommandMessage<T>,
     context: ResponderContext<CommandMessageFactory<T>>,
     reportError: ResponderErrorHandler,
-  ): Promise<void> {
+  ): Promise<void> => {
     const responderNames = this.#responderRoutes.get(
       command.$factory as CommandMessageFactory<T>,
     )
@@ -183,7 +242,7 @@ export class MessageBus implements Runnable {
     if (!responderNames?.size) return
 
     await Promise.all(
-      Array.from(responderNames, (name) =>
+      [...responderNames].map((name) =>
         this.#participants
           .get(name)
           ?.dispatcher.dispatchCommand(command, context, reportError),
@@ -206,12 +265,12 @@ export class MessageBus implements Runnable {
    * life. With a `name`, resumes just that participant; with no argument, resumes
    * every participant on the bus.
    */
-  resume(name?: string) {
-    this.#running = true
-    if (name === undefined)
+  override resume(name?: string) {
+    if (name === undefined) {
+      super.resume()
       for (const participant of this.#participants.values())
         participant.resume()
-    else this.#participants.get(name)?.resume()
+    } else this.#participants.get(name)?.resume()
   }
 
   /**
@@ -219,11 +278,11 @@ export class MessageBus implements Runnable {
    * until resumed. With a `name`, pauses just that participant; with no argument,
    * pauses every participant on the bus. Reversible via {@link MessageBus.prototype.resume}.
    */
-  pause(name?: string) {
-    this.#running = false
-    if (name === undefined)
+  override pause(name?: string) {
+    if (name === undefined) {
+      super.pause()
       for (const participant of this.#participants.values()) participant.pause()
-    else this.#participants.get(name)?.pause()
+    } else this.#participants.get(name)?.pause()
   }
 
   /**
@@ -237,4 +296,8 @@ export class MessageBus implements Runnable {
       this.pause()
     }
   }
+}
+
+function rethrow(error: unknown): never {
+  throw error
 }

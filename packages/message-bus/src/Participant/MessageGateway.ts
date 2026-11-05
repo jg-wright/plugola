@@ -12,7 +12,6 @@ import type {
   ResponderContext,
   ResponderErrorHandler,
 } from '../Roles/Responder.ts'
-import type { Serializable } from '../Message/Serializable.ts'
 import type { Filter } from '../Filter.ts'
 import type { MessageBus } from '../MessageBus.ts'
 import type { Participant } from './Participant.ts'
@@ -46,19 +45,28 @@ export class MessageGateway {
    * the message as it stood after interception, or {@link CANCEL} if it was
    * cancelled. Queued through this participant, so it waits while it is paused.
    *
-   * The message's payload must be {@link Serializable}, so that a subscriber
-   * receiving it later (after the queue was paused) sees a faithful snapshot
-   * rather than a possibly-stale live reference.
+   * The payload is delivered by reference, so it may hold live objects (DOM
+   * nodes, callbacks, …). Bear in mind a subscriber on a paused participant sees
+   * it later, when the referenced object may have changed. Only messages that
+   * cross a {@link MessagingBridge} must be {@link Serializable}; see
+   * {@link TransportableMessageRegistry}.
    */
-  readonly emit: <M extends Message>(
-    message: M & Serializable<M>,
-  ) => Promise<M | typeof CANCEL>
+  readonly emit: <M extends Message>(message: M) => Promise<M | typeof CANCEL>
+
+  /** Emits a command on its way to being invoked. */
+  readonly #emitCommand: (
+    command: CommandMessage,
+  ) => Promise<CommandMessage | typeof CANCEL>
 
   constructor(participant: Participant, bus: MessageBus) {
     this.#participant = participant
     this.#bus = bus
     this.emit = participant.queue.queueMethod(<M extends Message>(message: M) =>
-      bus.emit(message),
+      bus.emit(message, participant.name),
+    )
+    this.#emitCommand = participant.queue.queueMethod(
+      (command: CommandMessage) =>
+        bus.emit(command, participant.name, { invoked: true }),
     )
   }
 
@@ -171,10 +179,15 @@ export class MessageGateway {
     subscriber?: Subscriber<M>,
   ): () => void {
     const filter = (subscriber ? filterOrSubscriber : {}) as Filter<M>
-    subscriber ??= filterOrSubscriber as Subscriber<M>
+    const fire = subscriber ?? (filterOrSubscriber as Subscriber<M>)
+    // Guards against a message emitted from within the subscriber, which is
+    // delivered before `off` takes effect.
+    let fired = false
     const off = this.on(messageFactory, filter, (message) => {
-      subscriber(message)
+      if (fired) return
+      fired = true
       off()
+      return fire(message)
     })
     return off
   }
@@ -288,7 +301,7 @@ export class MessageGateway {
     },
     reportError: ResponderErrorHandler,
   ) => {
-    const result = await this.emit(command)
+    const result = await this.#emitCommand(command)
     if (result === CANCEL) return
     await this.#bus.invoke(result, context, reportError)
   }
@@ -316,12 +329,10 @@ export class MessageGateway {
    * ```
    */
   invoke<E extends CommandMessage>(
-    command: E & Serializable<E>,
+    command: E,
     {
       signal,
-      onError = (error) => {
-        throw error
-      },
+      onError = this.#bus.onResponderError,
     }: {
       signal?: AbortSignal
       onError?: ResponderErrorHandler

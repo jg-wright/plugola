@@ -1,6 +1,10 @@
 import LoggerBehavior from './LoggerBehavior.js'
 import { TabularData } from './types.js'
 
+/**
+ * A labelled logger. Its methods are bound, so they can be passed around as
+ * callbacks (e.g. `promise.catch(log.error)`).
+ */
 export default class Logger {
   readonly #behaviors: LoggerBehavior[]
   readonly #label: string
@@ -9,7 +13,7 @@ export default class Logger {
   constructor(
     name: string,
     behaviors: LoggerBehavior | LoggerBehavior[],
-    label: string = `[${name}]`
+    label: string = `[${name}]`,
   ) {
     this.#behaviors = Array.isArray(behaviors) ? behaviors : [behaviors]
     this.#label = label
@@ -20,39 +24,39 @@ export default class Logger {
     return this.#name
   }
 
-  debug(...args: any[]) {
+  readonly debug = (...args: any[]) => {
     this.#behaviors.forEach((b) => b.debug(this.#label, ...args))
   }
 
-  error(...args: any[]) {
+  readonly error = (...args: any[]) => {
     this.#behaviors.forEach((b) => b.error(this.#label, ...args))
   }
 
-  extend(label: string) {
+  readonly extend = (label: string) => {
     return new Logger(this.#name, this.#behaviors, `${this.#label}[${label}]`)
   }
 
-  info(...args: any[]) {
+  readonly info = (...args: any[]) => {
     this.#behaviors.forEach((b) => b.info(this.#label, ...args))
   }
 
-  log(...args: any[]) {
+  readonly log = (...args: any[]) => {
     this.#behaviors.forEach((b) => b.log(this.#label, ...args))
   }
 
-  table(table: TabularData) {
+  readonly table = (table: TabularData) => {
     this.#behaviors.forEach((b) => b.table(this.#label, table))
   }
 
-  time(name: string) {
+  readonly time = (name: string) => {
     this.#behaviors.forEach((b) => b.time(this.#label, name))
   }
 
-  timeEnd(name: string) {
+  readonly timeEnd = (name: string) => {
     this.#behaviors.forEach((b) => b.timeEnd(this.#label, name))
   }
 
-  warn(...args: any[]) {
+  readonly warn = (...args: any[]) => {
     this.#behaviors.forEach((b) => b.warn(this.#label, ...args))
   }
 }

@@ -1,66 +1,82 @@
-# @johngeorgewright/test
+# @plugola/test
 
 > Test plugola plugins
 
-## Example
+`testPlugin` declares a vitest `describe` per entry in `tests`. Each one enables
+the plugin under test alongside that entry's plugins (`init`), then runs them
+(`run`), so the entry's plugins can drive and assert on the plugin under test.
+
+## Testing a plugin on its own manager
+
+The plugin's context comes from `testContext` (shared by every plugin in the
+test) and `pluginContext` (per plugin).
 
 ```typescript
 testPlugin({
-  pluginContext(pluginName) {
-    return { pluginName }
-  },
-
   testContext() {
-    return {
-      mung: {},
-      $i: new Invokables<{ mung: { args: []; return: unknown } }>(),
-    }
+    return { messageBus: new MessageBus() }
   },
 
-  EnableContext() {
-    return {}
+  pluginContext(pluginName, { messageBus }) {
+    return { gateway: messageBus.gateway(pluginName) }
   },
 
-  runContext() {
-    return {}
+  plugin: {
+    name: 'greeter',
+    run({ gateway }) {
+      gateway.register(Greet, ({ name }, { send }) => send(`Hello ${name}`))
+    },
   },
 
-  afterRun({ $i }) {
-    return $i.start()
+  onStarted({ messageBus }) {
+    messageBus.resume()
   },
 
   tests: {
-    'pluginContext is different for each plugin': [
-      // ARRAY OF PLUGINS
-      {
-        name: 'test',
-        run({ pluginName }) {
-          expect(pluginName).toBe('test')
-        },
+    'greets by name': {
+      async run({ gateway }) {
+        expect(await gateway.invoke(Greet({ name: 'Ada' })).first()).toBe(
+          'Hello Ada',
+        )
       },
-      {
-        name: 'test 2',
-        run({ pluginName }) {
-          expect(pluginName).toBe('test 2')
-        },
-      },
-    ],
-
-    'testContext is the same for every plugin': [
-      // ARRAY OF PLUGINS
-      {
-        name: 'test',
-        run({ $i, mung }) {
-          $i.register('mung', () => mung)
-        },
-      },
-      {
-        name: 'test 2',
-        async run({ $i, mung }) {
-          expect(await $i.invoke('mung')).toBe(mung)
-        },
-      },
-    ],
+    },
   },
 })
 ```
+
+## Testing a plugin registered on a host manager
+
+Pass the host's `pluginManager` and the name the plugin is registered under.
+Tests run on a sibling manager (`pluginManager.withOptions`), so every plugin
+gets the host's context, and its inferred types, with `pluginContext` layered
+over it. Only the plugin under test and the test's own plugins are enabled.
+
+```typescript
+testPlugin({
+  pluginManager,
+  plugin: 'greeter',
+  pluginContext: () => ({ log: silentLog }),
+
+  onStarted() {
+    messageBus.resume()
+  },
+
+  tests: {
+    'greets by name': {
+      async run({ broker }) {
+        expect(await broker.invoke(Greet({ name: 'Ada' })).first()).toBe(
+          'Hello Ada',
+        )
+      },
+    },
+  },
+})
+```
+
+## Hooks
+
+| Hook                               | Called with                                                          |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `afterInit(testContext, enabling)` | the promise of enabling the plugins                                  |
+| `afterRun(testContext, running)`   | the promise of running them                                          |
+| `onStarted(testContext)`           | once every run hook has been invoked; passed to `run({ onStarted })` |

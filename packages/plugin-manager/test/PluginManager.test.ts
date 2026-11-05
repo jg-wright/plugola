@@ -191,6 +191,30 @@ test('run() waits for an enabled optional dependency', async () => {
   expect(order).toEqual(['opt', 'mung'])
 })
 
+test('run() waits for a dependency that is already running', async () => {
+  const order: string[] = []
+
+  pluginManager.registerPlugin('dep', {
+    async run() {
+      await timeout(10)
+      order.push('dep')
+    },
+  })
+
+  pluginManager.registerPlugin('mung', {
+    dependencies: ['dep'],
+    run() {
+      order.push('mung')
+    },
+  })
+
+  // dep starts running from the top level before mung asks for it.
+  await pluginManager.enablePlugins(['dep', 'mung'])
+  await pluginManager.run()
+
+  expect(order).toEqual(['dep', 'mung'])
+})
+
 test('run() does not wait for an optional dependency that is not enabled', async () => {
   const mung = vi.fn()
 
@@ -208,6 +232,125 @@ test('run() does not wait for an optional dependency that is not enabled', async
   await pluginManager.run()
 
   expect(mung).toHaveBeenCalled()
+})
+
+describe('run() onStarted', () => {
+  test('is called once every run hook has been invoked, before they settle', async () => {
+    const events: string[] = []
+    const latch = createLatch()
+
+    for (const name of ['foo', 'bar'])
+      pluginManager.registerPlugin(name, {
+        async run() {
+          events.push(`${name} invoked`)
+          await latch.promise
+          events.push(`${name} settled`)
+        },
+      })
+
+    await pluginManager.enableAllPlugins()
+    await pluginManager.run({
+      onStarted() {
+        events.push('started')
+        latch.release()
+      },
+    })
+
+    expect(events).toEqual([
+      'foo invoked',
+      'bar invoked',
+      'started',
+      'foo settled',
+      'bar settled',
+    ])
+  })
+
+  test('does not wait for plugins that depend on another', async () => {
+    const events: string[] = []
+    const latch = createLatch()
+
+    pluginManager.registerPlugin('foo', {
+      async run() {
+        events.push('foo invoked')
+        await latch.promise
+      },
+    })
+
+    pluginManager.registerPlugin('bar', {
+      dependencies: ['foo'],
+      run() {
+        events.push('bar invoked')
+      },
+    })
+
+    pluginManager.registerPlugin('mung', {
+      optionalDependencies: ['foo'],
+      run() {
+        events.push('mung invoked')
+      },
+    })
+
+    await pluginManager.enableAllPlugins()
+    await pluginManager.run({
+      onStarted() {
+        events.push('started')
+        latch.release()
+      },
+    })
+
+    expect(events).toEqual([
+      'foo invoked',
+      'started',
+      'bar invoked',
+      'mung invoked',
+    ])
+  })
+
+  test('counts plugins that have no run hook or whose run throws', async () => {
+    const onStarted = vi.fn()
+    const onPluginError = vi.fn()
+    pluginManager = new PluginManager({ onPluginError })
+
+    pluginManager.registerPlugin('foo', {})
+    pluginManager.registerPlugin('bar', {
+      run() {
+        throw new Error('boom')
+      },
+    })
+
+    await pluginManager.enableAllPlugins()
+    await pluginManager.run({ onStarted })
+
+    expect(onStarted).toHaveBeenCalledOnce()
+    expect(onPluginError).toHaveBeenCalledOnce()
+  })
+
+  test('a throw rejects run() rather than being reported as a plugin error', async () => {
+    const onPluginError = vi.fn()
+    pluginManager = new PluginManager({ onPluginError })
+
+    pluginManager.registerPlugin('foo', { run() {} })
+    pluginManager.registerPlugin('bar', {})
+
+    await pluginManager.enableAllPlugins()
+    await expect(
+      pluginManager.run({
+        onStarted() {
+          throw new Error('boom')
+        },
+      }),
+    ).rejects.toThrow('boom')
+
+    expect(onPluginError).not.toHaveBeenCalled()
+  })
+
+  test('is called when there are no enabled plugins', async () => {
+    const onStarted = vi.fn()
+
+    await pluginManager.run({ onStarted })
+
+    expect(onStarted).toHaveBeenCalledOnce()
+  })
 })
 
 test('extra context', async () => {
@@ -563,3 +706,9 @@ test('replacing context', async () => {
   expect(run).toHaveBeenCalledTimes(1)
   expect(run.mock.calls[0][0].foo).toBe('rab')
 })
+
+function createLatch() {
+  let release!: () => void
+  const promise = new Promise<void>((resolve) => (release = resolve))
+  return { promise, release }
+}

@@ -97,23 +97,25 @@ gateway.emit(Greeting({ text: 'hi' }))
 bus.resume()
 ```
 
-## Serializable payloads
+## Payloads
 
-Because a message can sit in a paused queue and be delivered later — and can
-cross a bridge — its payload must be JSON-safe: strings, numbers, booleans,
-`null`, and arrays/plain objects of those. This is a **compile-time** rule on
-`emit` and `invoke` arguments; nothing is validated or cloned in-process. Keys
-prefixed with `$` (framework metadata like `$name`) are exempt.
+In-process, a message is delivered by reference, so its payload may hold
+anything — DOM nodes, callbacks, class instances. Bear in mind that a subscriber
+on a paused participant receives the message later, by which time a referenced
+object may have changed.
+
+Messages that cross a bridge are different: see
+[Transports](#transports-bridging-buses). A message registered on a
+`TransportableMessageRegistry` with the default codec must have a JSON-safe
+payload (strings, numbers, booleans, `null`, and arrays/plain objects of those).
+This is a **compile-time** rule; keys prefixed with `$` (framework metadata like
+`$name`) are exempt. A payload that isn't JSON-safe needs a full custom codec.
 
 ```typescript
-const Clicked = message<{ el: HTMLElement }>('clicked')
-
-gateway.emit(Clicked({ el })) // ⛔ HTMLElement isn't serializable
+TransportableMessageRegistry.create()
+  .message('clicked')
+  .as<{ el: HTMLElement }>() // ⛔ HTMLElement isn't serializable
 ```
-
-Constraining payloads to plain data means a subscriber that receives a message
-after the queue was paused sees a faithful snapshot rather than a possibly-stale
-live reference.
 
 ## Filtering subscriptions
 
@@ -225,6 +227,28 @@ const files = await app
   .collect()
 ```
 
+To isolate responders on every invoke that doesn't pass its own `onError`,
+give the bus an `onResponderError`:
+
+```typescript
+const bus = new MessageBus({
+  onResponderError: (error) => console.error(error),
+})
+```
+
+## Observing the bus
+
+`bus.observe` sees every message as it is emitted (with the sender's name),
+cancelled by an interceptor, delivered to a participant's subscribers, or handed
+to a participant's responders. Useful for tracing and for asserting on traffic
+in tests; an observer can't change what happens.
+
+```typescript
+const stop = bus.observe((event) => {
+  if (event.type === 'emit') console.log(event.from, '→', event.message.$name)
+})
+```
+
 ## Pausing and lifecycle
 
 Each participant has its own queue, so participants pause independently.
@@ -273,7 +297,7 @@ server — can be joined with a **`MessagingBridge`** (EIP's _Messaging Bridge_)
 The bridge joins each bus as a participant and replicates messages and commands
 across a **`Channel`**, so neither bus core needs to know a transport exists.
 
-A **`MessageRegistry`** is the contract the two ends share: it maps each `$name`
+A **`TransportableMessageRegistry`** is the contract the two ends share: it maps each `$name`
 to its factory, so a message named on the wire can be resolved and decoded on the
 other side. Defining a message _through_ the registry registers it in one act —
 so it can't be forgotten — and the registry doubles as the set of factories the
@@ -281,13 +305,28 @@ bridge relays.
 
 ```typescript
 // contract.ts — imported by both ends
-import { MessageRegistry } from '@plugola/message-bus'
+import { TransportableMessageRegistry } from '@plugola/message-bus'
 
-export const registry = new MessageRegistry()
-export const Ping = registry.registerMessage<{ at: number }>('ping')
-export const Sum = registry.registerCommand<{ a: number; b: number }, number>(
-  'sum',
-)
+export const registry = TransportableMessageRegistry.create()
+  .message('ping')
+  .as<{ at: number }>()
+  .command('sum')
+  .as<{ a: number; b: number }, number>()
+
+export const { ping: Ping } = registry.messages
+export const { sum: Sum } = registry.commands
+```
+
+A factory already defined with `message()` or `command()`, in a module the rest
+of the app imports, can be added as it is. The same factory then routes locally
+and crosses the bridge:
+
+```typescript
+import { UserActive, GetSettings } from './messages.ts'
+
+export const registry = TransportableMessageRegistry.create()
+  .addMessage(UserActive)
+  .addCommand(GetSettings)
 ```
 
 Registering is also what gives a factory its codec (`$encode`/`$decode`) — the
@@ -296,15 +335,26 @@ decodes by reconstruction, so most messages need nothing extra. Pass a codec onl
 for non-trivial wire shapes:
 
 ```typescript
-export const Occurred = registry.registerMessage<{ at: Date }>('occurred', {
-  encode: (m) => ({ at: m.at.toISOString() }),
-  decode: (p) => Occurred({ at: new Date(p.at) }),
-})
+const registry = TransportableMessageRegistry.create()
+  .message('occurred')
+  .as<{ at: Date }>({
+    encode: (m) => ({ at: m.at.toISOString() }),
+    decode: (p) => registry.messages.occurred({ at: new Date(p.at) }),
+  })
 ```
 
 Wire a bridge onto each bus over a channel. `LoopbackChannel.pair()` is an
-in-memory channel handy for tests and same-process bridging; for real transports
-you implement `Channel` (two methods) over `postMessage`, a `WebSocket`, etc.
+in-memory channel handy for tests and same-process bridging.
+`PostMessageChannel` works over a browser `Worker`, a worker's `self` or a
+`MessagePort`, and `PortChannel` over a `node:worker_threads` port. For other
+transports you implement `Channel` (two methods) over a `WebSocket`, etc.
+
+```typescript
+// page
+new MessagingBridge(bus, new PostMessageChannel(new Worker(url)), registry)
+// worker
+new MessagingBridge(bus, new PostMessageChannel(self), registry)
+```
 
 ```typescript
 import {
@@ -343,18 +393,17 @@ adapter serialises however its transport needs.
 ```typescript
 import type { Channel, Frame } from '@plugola/message-bus'
 
-class PostMessageChannel implements Channel {
-  constructor(private readonly port: MessagePort) {}
+class WebSocketChannel implements Channel {
+  constructor(private readonly socket: WebSocket) {}
 
   send(frame: Frame) {
-    this.port.postMessage(frame)
+    this.socket.send(JSON.stringify(frame))
   }
 
   receive(handler: (frame: Frame) => void) {
-    const listener = (e: MessageEvent) => handler(e.data)
-    this.port.addEventListener('message', listener)
-    this.port.start()
-    return () => this.port.removeEventListener('message', listener)
+    const listener = (e: MessageEvent) => handler(JSON.parse(e.data))
+    this.socket.addEventListener('message', listener)
+    return () => this.socket.removeEventListener('message', listener)
   }
 }
 ```

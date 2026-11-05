@@ -91,12 +91,15 @@ export type MessageOf<F> = F extends (...args: any) => infer M ? M : never
  * back-reference. Shared by {@link message} and {@link command}: a command
  * factory is identical at runtime — what makes it a command is being registered
  * as one (see {@link MessageRegistry}), not any flag it carries.
+ *
+ * The metadata is non-enumerable, so spreading a message, iterating its
+ * entries or serialising it sees only the payload.
  */
 export function createFactory(name: string): MessageFactory {
-  const factory = ((payload?: object) => ({
-    ...payload,
-    $name: name,
-    $factory: factory,
-  })) as MessageFactory
+  const factory = ((payload?: object) =>
+    Object.defineProperties(
+      { ...payload },
+      { $name: { value: name }, $factory: { value: factory } },
+    )) as MessageFactory
   return Object.assign(factory, { $name: name })
 }

@@ -15,9 +15,9 @@ import type PluginManager from './PluginManager.js'
  * ```
  */
 export type PluginManagerEnableContext<
-  PM extends PluginManager<any, any, any>,
+  PM extends PluginManager<any, any, any, any>,
 > =
-  PM extends PluginManager<infer C, infer IC, any>
+  PM extends PluginManager<infer C, infer IC, any, any>
     ? EnableContext & C & IC
     : never
 
@@ -27,5 +27,9 @@ export type PluginManagerEnableContext<
  * run-specific extra context. The `run` counterpart to
  * {@link PluginManagerEnableContext}.
  */
-export type PluginManagerRunContext<PM extends PluginManager<any, any, any>> =
-  PM extends PluginManager<infer C, any, infer RC> ? RunContext & C & RC : never
+export type PluginManagerRunContext<
+  PM extends PluginManager<any, any, any, any>,
+> =
+  PM extends PluginManager<infer C, any, infer RC, any>
+    ? RunContext & C & RC
+    : never

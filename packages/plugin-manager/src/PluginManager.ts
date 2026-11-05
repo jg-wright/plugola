@@ -1,5 +1,6 @@
-import { RunContext, EnableContext } from './Context.js'
+import { RunContext, EnableContext, ContextOptions } from './Context.js'
 import { Plugin } from './Plugin.js'
+import { Gate, GatePhase } from './Gate.js'
 import { race, timeout } from '@johngw/async'
 import DependencyGraph from './DependencyGraph.js'
 
@@ -17,27 +18,42 @@ import DependencyGraph from './DependencyGraph.js'
  * only (from {@link addEnableContext}).
  * @typeParam ExtraRunContext - Extra fields merged into the run context only
  * (from {@link addRunContext}).
+ * @typeParam PluginMeta - Extra fields every registered plugin may carry, which
+ * {@link Gate}s can read.
  */
 export interface PluginManagerOptions<
   ExtraContext extends Record<string, unknown>,
   ExtraEnableContext extends Record<string, unknown>,
   ExtraRunContext extends Record<string, unknown>,
+  PluginMeta extends object = {},
 > {
   /**
    * Returns extra fields merged into every plugin context — both `enable` and
-   * `run`. Called once per hook invocation with the plugin's name.
+   * `run`. Called once per hook invocation with the plugin's name and signal.
    */
-  addContext?(pluginName: string): ExtraContext
+  addContext?(pluginName: string, options: ContextOptions): ExtraContext
   /**
    * Returns extra fields merged into the `enable` context only. Called with the
-   * plugin's name when its `enable` hook is invoked.
+   * plugin's name and signal when its `enable` hook is invoked.
    */
-  addEnableContext?(pluginName: string): ExtraEnableContext
+  addEnableContext?(
+    pluginName: string,
+    options: ContextOptions,
+  ): ExtraEnableContext
   /**
    * Returns extra fields merged into the `run` context only. Called with the
-   * plugin's name when its `run` hook is invoked.
+   * plugin's name and signal when its `run` hook is invoked.
    */
-  addRunContext?(pluginName: string): ExtraRunContext
+  addRunContext?(pluginName: string, options: ContextOptions): ExtraRunContext
+  /**
+   * {@link Gate}s every plugin must pass before its hooks run. More can be
+   * added with {@link PluginManager.addGate}.
+   */
+  gates?: Gate<Plugin<any, any> & PluginMeta>[]
+  /**
+   * Called when a {@link Gate} refuses a plugin.
+   */
+  onPluginGated?(plugin: Plugin<any, any> & PluginMeta, phase: GatePhase): void
   /**
    * Default milliseconds to wait for a plugin's `enable` or `run` hook before
    * aborting it. When a hook times out the plugin is disabled and its `signal`
@@ -60,6 +76,28 @@ export interface PluginManagerOptions<
    * opt back into fail-fast behaviour.
    */
   onPluginError?(error: unknown, plugin: Plugin, phase: 'enable' | 'run'): void
+}
+
+/**
+ * Options for a single {@link PluginManager.run} call.
+ */
+export interface RunOptions {
+  /**
+   * Called once every enabled plugin that doesn't depend on another enabled
+   * plugin has had its `run` hook *invoked* — not settled — or been skipped
+   * (refused by a gate, disabled, or has no `run`). Useful for holding back
+   * outside events (such as resuming a paused message bus) until every plugin
+   * has had the chance to set up what it does synchronously in `run`.
+   *
+   * @remarks
+   * Plugins that depend on another plugin don't count: their `run` waits for
+   * their dependencies' `run` to settle, which may itself wait on whatever
+   * this callback releases. They still run once their dependencies have.
+   *
+   * If it throws, {@link PluginManager.run} rejects with that error straight
+   * away; plugins that are already running carry on.
+   */
+  onStarted?(): void
 }
 
 /**
@@ -88,26 +126,31 @@ export interface PluginManagerOptions<
  * `addEnableContext` option.
  * @typeParam ExtraRunContext - Extra context injected into `run`, from the
  * `addRunContext` option.
+ * @typeParam PluginMeta - Extra fields every registered plugin may carry, which
+ * {@link Gate}s can read.
  */
 export default class PluginManager<
   ExtraContext extends Record<string, unknown>,
   ExtraEnableContext extends Record<string, unknown>,
   ExtraRunContext extends Record<string, unknown>,
+  PluginMeta extends object = {},
 > {
   #plugins: Record<string, Plugin> = {}
+  #gates: Set<Gate<any>>
   #dependencyGraph = new DependencyGraph<Plugin>()
   #pendingDependencies = new Map<
     string,
     { source: Plugin; optional: boolean }[]
   >()
-  #ran = new WeakSet<Plugin>()
+  #runs = new WeakMap<Plugin, PluginRun>()
   #abortControllers = new WeakMap<Plugin, AbortController>()
   #pendingBatches = new Set<Set<string>>()
   #enabledPlugins = new Set<string>()
   #options: PluginManagerOptions<
     ExtraContext,
     ExtraEnableContext,
-    ExtraRunContext
+    ExtraRunContext,
+    PluginMeta
   >
 
   /**
@@ -118,10 +161,63 @@ export default class PluginManager<
     options: PluginManagerOptions<
       ExtraContext,
       ExtraEnableContext,
-      ExtraRunContext
+      ExtraRunContext,
+      PluginMeta
     > = {},
   ) {
     this.#options = options
+    this.#gates = new Set(options.gates)
+  }
+
+  /**
+   * Add a {@link Gate} that every plugin must pass before its `enable` and
+   * `run` hooks are called.
+   *
+   * @returns A function that removes the gate.
+   */
+  addGate(gate: Gate<ManagedPlugin<PluginMeta>>) {
+    this.#gates.add(gate)
+    return () => {
+      this.#gates.delete(gate)
+    }
+  }
+
+  /**
+   * Whether a plugin currently passes every gate. Pass a plugin's name, or a
+   * plugin-like object to ask whether something with that metadata would (for
+   * example, whether a vendor is consented to) — that check is not reported to
+   * `onPluginGated`.
+   *
+   * @param plugin - The plugin to check, or its name.
+   * @param phase - The phase the gates are told the check is for.
+   */
+  async checkGates(
+    plugin: string | ManagedPlugin<PluginMeta>,
+    phase: GatePhase = 'enable',
+  ) {
+    return typeof plugin === 'string'
+      ? this.#passesGates(this.#getPlugin(plugin), phase)
+      : this.#passesGates(plugin, phase, { report: false })
+  }
+
+  /**
+   * Re-evaluate every gate against the enabled plugins, disabling (along with
+   * their dependers) the ones that no longer pass — for example after a user
+   * withdraws consent.
+   *
+   * @returns The names of the plugins that no longer pass.
+   */
+  async recheckGates() {
+    const refused: string[] = []
+    await Promise.all(
+      this.enabledPlugins.map(async (pluginName) => {
+        const plugin = this.#plugins[pluginName]!
+        if (await this.#passesGates(plugin, 'enable')) return
+        refused.push(pluginName)
+        this.#disablePlugin(plugin, true)
+      }),
+    )
+    return refused
   }
 
   /** Names of the currently enabled plugins, as a new array. */
@@ -151,25 +247,32 @@ export default class PluginManager<
     options: PluginManagerOptions<
       ExtraContext,
       ExtraEnableContext,
-      ExtraRunContext
+      ExtraRunContext,
+      PluginMeta
     >,
   ) {
-    const pluginManager = new PluginManager({
+    const pluginManager = new PluginManager<
+      ExtraContext,
+      ExtraEnableContext,
+      ExtraRunContext,
+      PluginMeta
+    >({
       ...options,
-      addContext: (pluginName) =>
+      gates: [...this.#gates, ...(options.gates ?? [])],
+      addContext: (pluginName, contextOptions) =>
         ({
-          ...this.#options.addContext?.(pluginName),
-          ...options.addContext?.(pluginName),
+          ...this.#options.addContext?.(pluginName, contextOptions),
+          ...options.addContext?.(pluginName, contextOptions),
         }) as ExtraContext,
-      addEnableContext: (pluginName) =>
+      addEnableContext: (pluginName, contextOptions) =>
         ({
-          ...this.#options.addEnableContext?.(pluginName),
-          ...options.addEnableContext?.(pluginName),
+          ...this.#options.addEnableContext?.(pluginName, contextOptions),
+          ...options.addEnableContext?.(pluginName, contextOptions),
         }) as ExtraEnableContext,
-      addRunContext: (pluginName) =>
+      addRunContext: (pluginName, contextOptions) =>
         ({
-          ...this.#options.addRunContext?.(pluginName),
-          ...options.addRunContext?.(pluginName),
+          ...this.#options.addRunContext?.(pluginName, contextOptions),
+          ...options.addRunContext?.(pluginName, contextOptions),
         }) as ExtraRunContext,
     })
     pluginManager.#plugins = this.#plugins
@@ -189,7 +292,8 @@ export default class PluginManager<
     plugin: Plugin<
       EnableContext & ExtraContext & ExtraEnableContext,
       RunContext & ExtraContext & ExtraRunContext
-    >,
+    > &
+      PluginMeta,
   ): void
 
   /**
@@ -207,7 +311,8 @@ export default class PluginManager<
       Plugin<
         EnableContext & ExtraContext & ExtraEnableContext,
         RunContext & ExtraContext & ExtraRunContext
-      >,
+      > &
+        PluginMeta,
       'name'
     >,
   ): void
@@ -215,15 +320,17 @@ export default class PluginManager<
   registerPlugin(
     nameOrPlugin:
       | string
-      | Plugin<
+      | (Plugin<
           EnableContext & ExtraContext & ExtraEnableContext,
           RunContext & ExtraContext & ExtraRunContext
-        >,
+        > &
+          PluginMeta),
     plugin?: Omit<
       Plugin<
         EnableContext & ExtraContext & ExtraEnableContext,
         RunContext & ExtraContext & ExtraRunContext
-      >,
+      > &
+        PluginMeta,
       'name'
     >,
   ) {
@@ -291,13 +398,27 @@ export default class PluginManager<
    * dependencies (and its enabled optional dependencies) have run, and each runs
    * at most once. Resolves when all enabled plugins have finished running.
    *
+   * @param options - See {@link RunOptions}.
    * @throws If the enabled plugins contain a circular `run` dependency.
    */
-  async run() {
-    let promises: Promise<void>[] = []
-    for (const pluginName of this.#enabledPlugins)
-      promises.push(this.#runPlugin(this.#getPlugin(pluginName)))
-    await Promise.all(promises)
+  async run({ onStarted }: RunOptions = {}) {
+    const plugins = Array.from(this.#enabledPlugins, (pluginName) =>
+      this.#getPlugin(pluginName),
+    )
+
+    // Only plugins that don't wait on another plugin's run count towards
+    // `onStarted`; waiting on the rest could deadlock (see RunOptions).
+    const runs = plugins.map((plugin) => this.#runPlugin(plugin))
+    const starting = runs
+      .filter((_, i) => !this.#hasEnabledRunDependency(plugins[i]!))
+      .map(({ started }) => started)
+    const running = runs.map(({ settled }) => settled)
+
+    // Called from here rather than from a plugin's run, so that a throw
+    // rejects `run()` instead of being reported as that plugin's error.
+    if (onStarted) running.push(Promise.all(starting).then(onStarted))
+
+    await Promise.all(running)
   }
 
   /** Enable every registered plugin. */
@@ -437,7 +558,7 @@ export default class PluginManager<
       else return disabled
     }
     this.#enabledPlugins.delete(plugin.name)
-    this.#ran.delete(plugin)
+    this.#runs.delete(plugin)
     this.#abortControllers.get(plugin)?.abort()
     for (const dep of this.#dependencyGraph.dependencies(plugin))
       disabled += this.#disablePlugin(dep, false) // Never force disable dependencies
@@ -481,7 +602,7 @@ export default class PluginManager<
         'abort',
         () => {
           this.#enabledPlugins.delete(plugin.name)
-          this.#ran.delete(plugin)
+          this.#runs.delete(plugin)
           this.#abortControllers.delete(plugin)
         },
         { once: true },
@@ -503,6 +624,14 @@ export default class PluginManager<
       )
     if (dependencyPromises.length) await Promise.all(dependencyPromises)
 
+    if (!this.#dependenciesEnabled(plugin)) return this.#rollBack(plugin)
+
+    if (this.#gates.size && !(await this.#passesGates(plugin, 'enable')))
+      return this.#rollBack(plugin)
+
+    // It may have been disabled while waiting on its dependencies or gates.
+    if (!this.#enabledPlugins.has(plugin.name)) return
+
     if (!plugin.enable) return
 
     const { signal } = this.#abortController(plugin)
@@ -517,13 +646,60 @@ export default class PluginManager<
     } catch (error) {
       // Isolate the failure: roll the plugin back so it isn't left marked as
       // enabled, report it, and let sibling plugins carry on.
-      this.#enabledPlugins.delete(plugin.name)
-      this.#abortControllers.get(plugin)?.abort()
+      this.#rollBack(plugin)
       this.#reportPluginError(error, plugin, 'enable')
     }
   }
 
-  async #runPlugin(plugin: Plugin, path: Set<Plugin> = new Set()) {
+  #rollBack(plugin: Plugin) {
+    this.#enabledPlugins.delete(plugin.name)
+    this.#abortControllers.get(plugin)?.abort()
+  }
+
+  #dependenciesEnabled(plugin: Plugin) {
+    for (const dependency of this.#dependencyGraph.dependencies(plugin))
+      if (!this.#enabledPlugins.has(dependency.name)) return false
+    return true
+  }
+
+  /**
+   * Gates run one after another, in the order they were added, over the live
+   * set: a gate added while an earlier one is still deciding is checked too, so
+   * a gate can wait for other plugins to add theirs.
+   */
+  async #passesGates(
+    plugin: Plugin,
+    phase: GatePhase,
+    { report = true }: { report?: boolean } = {},
+  ) {
+    try {
+      let passes = true
+      for (const gate of this.#gates)
+        if (!(await gate(plugin, phase))) {
+          passes = false
+          break
+        }
+      if (passes) return true
+    } catch (error) {
+      if (!report) throw error
+      this.#reportPluginError(error, plugin, phase)
+    }
+    if (report)
+      this.#options.onPluginGated?.(plugin as ManagedPlugin<PluginMeta>, phase)
+    return false
+  }
+
+  /**
+   * @param started - Called as soon as the plugin's `run` hook has been invoked
+   * (before it settles) or the plugin has been skipped, and possibly again
+   * afterwards, so it must be idempotent and must not throw.
+   */
+  /**
+   * Runs a plugin once, after its dependencies, and returns that run to every
+   * caller — the top-level {@link PluginManager.run} and the plugins depending
+   * on it share one run, so its hook is never invoked twice.
+   */
+  #runPlugin(plugin: Plugin, path: Set<Plugin> = new Set()): PluginRun {
     if (path.has(plugin))
       throw new Error(
         `Circular dependency detected: ${[...path, plugin]
@@ -531,26 +707,67 @@ export default class PluginManager<
           .join(' -> ')}`,
       )
 
-    const nextPath = new Set(path).add(plugin)
-    await this.#runDependencies(plugin, nextPath)
-
-    if (this.#ran.has(plugin) || !plugin.run) return
-
-    const { signal } = this.#abortController(plugin)
-    if (signal.aborted) return
-
-    this.#ran.add(plugin)
-
-    try {
-      await this.#pluginRace(
-        plugin,
-        () => plugin.run!(this.#createRunContext(plugin, signal)),
-        this.#options.pluginTimeout,
-      )
-    } catch (error) {
-      // Isolate the failure so sibling plugins still run.
-      this.#reportPluginError(error, plugin, 'run')
+    let run = this.#runs.get(plugin)
+    if (!run) {
+      const { promise: started, resolve: start } = Promise.withResolvers<void>()
+      run = {
+        started,
+        settled: this.#executeRun(plugin, new Set(path).add(plugin), start),
+      }
+      this.#runs.set(plugin, run)
     }
+    return run
+  }
+
+  /**
+   * @param start - Called as soon as the plugin's `run` hook has been invoked
+   * (before it settles), or once the plugin has been skipped.
+   */
+  async #executeRun(plugin: Plugin, path: Set<Plugin>, start: () => void) {
+    try {
+      await this.#runDependencies(plugin, path)
+
+      if (!plugin.run) return
+
+      // A dependency may have been refused by a gate, or this plugin disabled,
+      // while its dependencies ran.
+      if (
+        !this.#enabledPlugins.has(plugin.name) ||
+        !this.#dependenciesEnabled(plugin)
+      )
+        return
+
+      if (this.#gates.size && !(await this.#passesGates(plugin, 'run'))) {
+        this.#disablePlugin(plugin, true)
+        return
+      }
+
+      const { signal } = this.#abortController(plugin)
+      if (signal.aborted) return
+
+      try {
+        const running = this.#pluginRace(
+          plugin,
+          () => plugin.run!(this.#createRunContext(plugin, signal)),
+          this.#options.pluginTimeout,
+        )
+        start()
+        await running
+      } catch (error) {
+        // Isolate the failure so sibling plugins still run.
+        this.#reportPluginError(error, plugin, 'run')
+      }
+    } finally {
+      start()
+    }
+  }
+
+  #hasEnabledRunDependency(plugin: Plugin) {
+    for (const dependency of this.#dependencyGraph.dependencies(plugin))
+      if (this.#enabledPlugins.has(dependency.name)) return true
+    for (const dependency of this.#dependencyGraph.optionalDependencies(plugin))
+      if (this.#enabledPlugins.has(dependency.name)) return true
+    return false
   }
 
   #pluginRace(plugin: Plugin, fn: () => Promise<any>, ms?: number) {
@@ -580,11 +797,8 @@ export default class PluginManager<
 
     const promises: Promise<void>[] = []
     for (const dependency of dependencies)
-      if (
-        !this.#ran.has(dependency) &&
-        this.#enabledPlugins.has(dependency.name)
-      )
-        promises.push(this.#runPlugin(dependency, path))
+      if (this.#enabledPlugins.has(dependency.name))
+        promises.push(this.#runPlugin(dependency, path).settled)
 
     await Promise.all(promises)
   }
@@ -593,8 +807,18 @@ export default class PluginManager<
     return {
       enablePlugins: this.enablePlugins,
       disablePlugins: this.disablePlugins,
+      addGate: (gate: Gate<any>) => {
+        const removeGate = this.addGate(gate)
+        signal.addEventListener('abort', removeGate, { once: true })
+        return () => {
+          signal.removeEventListener('abort', removeGate)
+          removeGate()
+        }
+      },
+      checkGates: (plugin: string | ManagedPlugin<PluginMeta>) =>
+        this.checkGates(plugin),
       ...this.#createContext(plugin, signal),
-      ...(this.#options.addEnableContext?.(plugin.name) || {}),
+      ...(this.#options.addEnableContext?.(plugin.name, { signal }) || {}),
     }
   }
 
@@ -604,14 +828,22 @@ export default class PluginManager<
   ): Record<string, unknown> {
     return {
       ...this.#createContext(plugin, signal),
-      ...(this.#options.addRunContext?.(plugin.name) || {}),
+      ...(this.#options.addRunContext?.(plugin.name, { signal }) || {}),
     }
   }
 
   #createContext({ name }: Plugin, signal: AbortSignal) {
     return {
       signal,
-      ...(this.#options.addContext?.(name) || {}),
+      ...(this.#options.addContext?.(name, { signal }) || {}),
     }
   }
+}
+
+type ManagedPlugin<PluginMeta extends object> = Plugin<any, any> & PluginMeta
+
+/** One plugin's run: when its hook was invoked (or skipped), and when it settled. */
+interface PluginRun {
+  started: Promise<void>
+  settled: Promise<void>
 }

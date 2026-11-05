@@ -281,3 +281,35 @@ describe('until', () => {
     await expect(promise).rejects.toBe(reason)
   })
 })
+
+test('what an aborted gateway emitted while the bus was paused is still delivered', () => {
+  const pausedBus = new MessageBus()
+  const subscriber = vi.fn()
+  pausedBus.gateway('subscriber').on(TestMessage, subscriber)
+  const controller = new AbortController()
+  const leaving = pausedBus.gateway('leaving', controller.signal)
+
+  leaving.emit(TestMessage({ foo: 'bar' }))
+  controller.abort()
+  expect(subscriber).not.toHaveBeenCalled()
+
+  pausedBus.resume()
+  expect(subscriber).toHaveBeenCalledWith(
+    expect.objectContaining({ foo: 'bar' }),
+  )
+})
+
+test('an aborted gateway no longer receives what was queued for it', () => {
+  const pausedBus = new MessageBus()
+  const controller = new AbortController()
+  const subscriber = vi.fn()
+  pausedBus.gateway('leaving', controller.signal).on(TestMessage, subscriber)
+  const sender = pausedBus.gateway('sender')
+  pausedBus.resume('sender')
+
+  sender.emit(TestMessage({ foo: 'bar' }))
+  controller.abort()
+  pausedBus.resume()
+
+  expect(subscriber).not.toHaveBeenCalled()
+})

@@ -58,3 +58,45 @@ test('action listeners', () => {
   expect(subscriber).toHaveBeenCalledTimes(1)
   expect(subscriber).toHaveBeenCalledWith({ foo: 'bar' })
 })
+
+test('unsubscribing from context changes', () => {
+  const onUpdate = vi.fn()
+  store.resume()
+  const unsubscribe = store.subscribe(onUpdate)
+  unsubscribe()
+  store.dispatch('bar')
+  expect(onUpdate).not.toHaveBeenCalled()
+})
+
+test('unsubscribing from stale events', () => {
+  const subscriber = vi.fn()
+  const unsubscribe = store.subscribeToStaleEvents(subscriber)
+  store.resume()
+  store.dispatch('bar')
+  unsubscribe()
+  store.dispatch('bar')
+  expect(subscriber).not.toHaveBeenCalled()
+})
+
+test('unsubscribing from actions', () => {
+  const subscriber = vi.fn()
+  const unsubscribe = store.on('foo', subscriber)
+  store.resume()
+  store.dispatch('foo', 'one')
+  unsubscribe()
+  store.dispatch('foo', 'two')
+  expect(subscriber).toHaveBeenCalledTimes(1)
+})
+
+test('unsubscribing twice only removes the one subscription', () => {
+  const a = vi.fn()
+  const b = vi.fn()
+  store.resume()
+  const unsubscribeA = store.subscribe(a)
+  store.subscribe(b)
+  unsubscribeA()
+  unsubscribeA()
+  store.dispatch('bar')
+  expect(a).not.toHaveBeenCalled()
+  expect(b).toHaveBeenCalledTimes(1)
+})

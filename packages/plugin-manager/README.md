@@ -65,14 +65,16 @@ await pluginManager.run() // runs config, then server
 ## Injecting context
 
 Plugins receive a **context** object in each hook. Out of the box that context
-contains an `AbortSignal`, and — in `enable` — `enablePlugins` / `disablePlugins`.
+contains an `AbortSignal`, and — in `enable` — `enablePlugins` / `disablePlugins`
+and `addGate` / `checkGates`.
 You can inject your own values (a logger, storage, a message bus, …) via three
 option callbacks. Their return types flow through to the plugin hooks, so
 context is fully typed.
 
 ```typescript
 import { PluginManager } from '@plugola/plugin-manager'
-import { Logger, ConsoleLoggerBehavior } from '@plugola/logger'
+import Logger from '@plugola/logger/Logger'
+import ConsoleLoggerBehavior from '@plugola/logger/ConsoleLoggerBehavior'
 
 const pluginManager = new PluginManager({
   // Merged into BOTH enable and run context:
@@ -81,13 +83,9 @@ const pluginManager = new PluginManager({
     sessionStorage,
   }),
   // Merged into the enable context only:
-  addEnableContext: () => ({
-    /* … */
-  }),
+  addEnableContext: () => ({/* … */}),
   // Merged into the run context only:
-  addRunContext: () => ({
-    /* … */
-  }),
+  addRunContext: () => ({/* … */}),
 })
 
 pluginManager.registerPlugin('session-depth', {
@@ -100,6 +98,17 @@ pluginManager.registerPlugin('session-depth', {
 
 await pluginManager.enablePlugins(['session-depth'])
 await pluginManager.run()
+```
+
+Each callback also receives `{ signal }`, the plugin's `AbortSignal`, so you can
+tie an injected resource's lifetime to the plugin's:
+
+```typescript
+const pluginManager = new PluginManager({
+  addContext: (pluginName, { signal }) => ({
+    gateway: gatewayFor(pluginName, signal),
+  }),
+})
 ```
 
 ## Dependencies
@@ -141,6 +150,27 @@ await pluginManager.run()
 await pluginManager.enablePlugins(['main'])
 await pluginManager.run()
 ```
+
+## Knowing when every plugin has started
+
+`run()` resolves once every `run` hook has _settled_, which can be long after
+they were called. Pass `onStarted` to be told as soon as every plugin's `run`
+has been _invoked_ — for example, to resume a paused message bus only once every
+plugin has subscribed, whatever order they were registered in:
+
+```typescript
+await bus.resumeUntil(pluginManager.enableAllPlugins())
+await pluginManager.run({
+  onStarted() {
+    bus.resume()
+  },
+})
+```
+
+Only the synchronous part of each `run` (up to its first `await`) is guaranteed
+to have happened. Plugins that depend on another enabled plugin don't count —
+their `run` waits for their dependencies to settle, which may itself be waiting
+on whatever `onStarted` releases.
 
 ## Enabling and disabling at runtime
 
@@ -195,6 +225,50 @@ pluginManager.registerPlugin('slow', {
 })
 ```
 
+## Gates
+
+A **gate** decides whether a plugin may proceed. Every gate must allow a plugin
+before its `enable` hook, and again before its `run` hook. A plugin a gate
+refuses is rolled back; one refused before `run` is disabled along with its
+dependers. A plugin whose hard dependency was refused isn't enabled either.
+Gates may be async.
+
+Give plugins extra metadata for gates to read with the `PluginMeta` type
+parameter:
+
+```typescript
+interface Meta {
+  vendorIds?: number[]
+}
+
+const pluginManager = new PluginManager<{}, {}, {}, Meta>({
+  gates: [({ vendorIds = [] }) => vendorIds.every((id) => consented.has(id))],
+  onPluginGated(plugin, phase) {
+    console.info(`${plugin.name} was refused before ${phase}`)
+  },
+})
+
+pluginManager.registerPlugin('analytics', { vendorIds: [77], run() {} })
+```
+
+Gates can also be added later with `addGate`, including from a plugin's
+`enable` hook, in which case the gate is removed when that plugin is disabled.
+A gate only applies from the moment it's added, so plugins that were already
+enabled are next checked before `run`. Gates run one after another, in the
+order they were added, so a gate added while an earlier gate is still deciding
+is checked too: an early gate can wait for other plugins to finish adding
+theirs. Call `recheckGates()` to re-evaluate
+the enabled plugins immediately, for example when a user withdraws consent.
+
+```typescript
+pluginManager.registerPlugin('consent', {
+  async enable({ addGate }) {
+    const consent = await waitForConsent()
+    addGate((plugin) => consent.allows(plugin))
+  },
+})
+```
+
 ## Error handling
 
 Plugin failures are isolated. By default an unknown plugin name throws, and a
@@ -237,31 +311,37 @@ Options ([`PluginManagerOptions`](src/PluginManager.ts)):
 
 | Option                                | Description                                           |
 | ------------------------------------- | ----------------------------------------------------- |
-| `addContext(name)`                    | Extra fields merged into both enable and run context. |
-| `addEnableContext(name)`              | Extra fields merged into the enable context only.     |
-| `addRunContext(name)`                 | Extra fields merged into the run context only.        |
+| `addContext(name, { signal })`        | Extra fields merged into both enable and run context. |
+| `addEnableContext(name, { signal })`  | Extra fields merged into the enable context only.     |
+| `addRunContext(name, { signal })`     | Extra fields merged into the run context only.        |
 | `pluginTimeout`                       | Default ms before an `enable`/`run` hook is aborted.  |
 | `onUnknownPlugin(name, phase)`        | Handle an unregistered name instead of throwing.      |
 | `onPluginError(error, plugin, phase)` | Handle a hook that throws instead of `console.error`. |
+| `gates`                               | Gates every plugin must pass before its hooks run.    |
+| `onPluginGated(plugin, phase)`        | Told when a gate refuses a plugin.                    |
 
 ### Methods & properties
 
-| Member                                                    | Description                                           |
-| --------------------------------------------------------- | ----------------------------------------------------- |
-| `registerPlugin(plugin)` / `registerPlugin(name, plugin)` | Register a plugin.                                    |
-| `enablePlugins(names)`                                    | Enable the named plugins and their dependencies.      |
-| `enableAllPlugins()`                                      | Enable every registered plugin.                       |
-| `disablePlugins(names, force?)`                           | Disable plugins; returns the count removed.           |
-| `disableAllPlugins()`                                     | Disable every registered plugin.                      |
-| `run()`                                                   | Run the `run` hook of every enabled plugin.           |
-| `withOptions(options)`                                    | Sibling manager sharing plugins, new context/options. |
-| `enabledPlugins`                                          | Array of currently enabled plugin names.              |
+| Member                                                    | Description                                                 |
+| --------------------------------------------------------- | ----------------------------------------------------------- |
+| `registerPlugin(plugin)` / `registerPlugin(name, plugin)` | Register a plugin.                                          |
+| `enablePlugins(names)`                                    | Enable the named plugins and their dependencies.            |
+| `enableAllPlugins()`                                      | Enable every registered plugin.                             |
+| `disablePlugins(names, force?)`                           | Disable plugins; returns the count removed.                 |
+| `disableAllPlugins()`                                     | Disable every registered plugin.                            |
+| `run({ onStarted? })`                                     | Run the `run` hook of every enabled plugin.                 |
+| `addGate(gate)`                                           | Add a gate; returns a function that removes it.             |
+| `checkGates(nameOrPlugin)`                                | Whether a plugin (or plugin-like object) passes every gate. |
+| `recheckGates()`                                          | Disable enabled plugins that no longer pass a gate.         |
+| `withOptions(options)`                                    | Sibling manager sharing plugins, new context/options.       |
+| `enabledPlugins`                                          | Array of currently enabled plugin names.                    |
 
 ### Exported types
 
 - [`Plugin<EC, RC>`](src/Plugin.ts) — a plugin definition.
 - [`PluginManagerOptions`](src/PluginManager.ts) — constructor options.
 - [`RunContext`](src/Context.ts), [`EnableContext`](src/Context.ts) — base context shapes.
+- [`Gate<P>`](src/Gate.ts) — a gate.
 - [`PluginManagerRunContext<PM>`](src/PluginManagerUtils.ts),
   [`PluginManagerEnableContext<PM>`](src/PluginManagerUtils.ts) — resolve a
   manager type's full context, useful for typing hooks against a concrete

@@ -11,6 +11,7 @@ export * from './Message/Named.ts'
 
 // Handler roles and subscription filtering
 export * from './Roles/Subscriber.ts'
+export * from './Roles/Observer.ts'
 export * from './Roles/Responder.ts'
 export * from './Roles/Interceptor.ts'
 export * from './Filter.ts'
@@ -23,4 +24,8 @@ export * from './MessageRegistry/TransportableMessageRegistry.ts'
 export * from './Channel/Channel.ts'
 export { LoopbackChannel } from './Channel/LoopbackChannel.ts'
 export { PortChannel, type PortLike } from './Channel/PortChannel.ts'
+export {
+  PostMessageChannel,
+  type PostMessageEndpoint,
+} from './Channel/PostMessageChannel.ts'
 export * from './Bridge/MessagingBridge.ts'

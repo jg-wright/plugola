@@ -4,12 +4,14 @@ import type {
   CommandMessageFactory,
 } from '../Message/CommandMessage.ts'
 import { CANCEL } from '../Roles/Interceptor.ts'
+import { chain } from '../lang/chain.ts'
 import type {
   ResponderContext,
   ResponderErrorHandler,
 } from '../Roles/Responder.ts'
 import type { Participant } from './Participant.ts'
 import type { MessageGateway } from './MessageGateway.ts'
+import type { MessageBus } from '../MessageBus.ts'
 
 /**
  * The inbound half of a {@link Participant}: the bus delivers messages/commands
@@ -27,20 +29,27 @@ export class MessageDispatcher {
 
   readonly #participant: Participant
 
-  constructor(participant: Participant) {
+  readonly #bus: MessageBus
+
+  constructor(participant: Participant, bus: MessageBus) {
     this.#participant = participant
+    this.#bus = bus
 
     this.dispatch = participant.queue.queueMethod((message: Message) => {
-      for (const performer of participant.registry.subscribersFor(
-        message.$factory,
-      ) ?? [])
-        performer.perform(message)
+      const subscribers = participant.registry.subscribersFor(message.$factory)
+      if (!subscribers?.size) return
+      bus.notify({ type: 'deliver', message, to: participant.name })
+      for (const performer of [...subscribers]) performer.perform(message)
     })
   }
 
-  async runInterceptors<E extends MessageFactory | CommandMessageFactory>(
+  /**
+   * Runs the participant's interceptors for the message in turn. Synchronous
+   * when they all return synchronously.
+   */
+  runInterceptors<E extends MessageFactory | CommandMessageFactory>(
     message: MessageOf<E>,
-  ): Promise<MessageOf<E> | typeof CANCEL> {
+  ): MessageOf<E> | typeof CANCEL | Promise<MessageOf<E> | typeof CANCEL> {
     if (!this.#participant.queue.running) return message
 
     const interceptors = this.#participant.registry.interceptorsFor(
@@ -49,13 +58,9 @@ export class MessageDispatcher {
 
     if (!interceptors?.size) return message
 
-    for (const interceptor of interceptors) {
-      const result = await interceptor.perform(message)
-      if (result === CANCEL) return CANCEL
-      else if (result) message = result as MessageOf<E>
-    }
-
-    return message
+    return chain([...interceptors], message, (interceptor, message) =>
+      interceptor.perform(message),
+    )
   }
 
   /**
@@ -80,8 +85,14 @@ export class MessageDispatcher {
 
     if (!responders?.size) return
 
+    this.#bus.notify({
+      type: 'respond',
+      message: command,
+      to: this.#participant.name,
+    })
+
     await Promise.all(
-      Array.from(responders, async (performer) => {
+      [...responders].map(async (performer) => {
         try {
           await performer.perform(command, context)
         } catch (error) {
