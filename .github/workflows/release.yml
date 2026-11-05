@@ -16,6 +16,8 @@ on:
 concurrency:
   group: publish-${{ github.event.release.tag_name || inputs.tag }}
 
+run-name: Release ${{ github.event.release.tag_name || inputs.tag }}
+
 jobs:
   npm:
     runs-on: ubuntu-latest
