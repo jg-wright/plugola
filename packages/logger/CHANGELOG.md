@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.0.4](https://github.com/jg-wright/plugola/compare/logger-v5.0.3...logger-v5.0.4) (2026-11-05)
+
+
+### Bug Fixes
+
+* **logger:** bind methods so they can be passed as callbacks ([38c001d](https://github.com/jg-wright/plugola/commit/38c001dc043bae7ba99143a73970544a4df185a7))
+
 ## [5.0.3](https://github.com/jg-wright/plugola/compare/logger-v5.0.2...logger-v5.0.3) (2026-06-08)
 
 

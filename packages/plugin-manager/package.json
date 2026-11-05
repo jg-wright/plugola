@@ -1,6 +1,6 @@
 {
   "name": "@plugola/plugin-manager",
-  "version": "9.0.1",
+  "version": "9.1.0",
   "description": "Plugin system",
   "type": "module",
   "exports": {

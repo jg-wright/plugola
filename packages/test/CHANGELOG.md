@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.1.0](https://github.com/jg-wright/plugola/compare/test-v3.0.0...test-v3.1.0) (2026-11-05)
+
+
+### Features
+
+* **test:** test plugins registered on a host plugin manager ([c1e90da](https://github.com/jg-wright/plugola/commit/c1e90da278084fb969e00d99cddf4a9bd9e2cd14))
+
+
+### Bug Fixes
+
+* **test:** accept current vitest versions as a peer ([c3d63f1](https://github.com/jg-wright/plugola/commit/c3d63f1e2e6629bdcd64f113f9a897bcaf42b41d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/message-bus bumped from ^8.0.0 to ^9.0.0
+    * @plugola/plugin-manager bumped from ^9.0.1 to ^9.1.0
+  * peerDependencies
+    * @plugola/plugin-manager bumped from ^9.0.1 to ^9.1.0
+
 ## [3.0.0](https://github.com/jg-wright/plugola/compare/test-v2.0.4...test-v3.0.0) (2026-11-02)
 
 
