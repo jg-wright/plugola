@@ -1,5 +1,14 @@
 # Changelog
 
+## [9.0.2](https://github.com/jg-wright/plugola/compare/store-v9.0.1...store-v9.0.2) (2026-11-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @plugola/queue bumped from ^1.0.0 to ^1.0.1
+
 ## [9.0.1](https://github.com/jg-wright/plugola/compare/store-v9.0.0...store-v9.0.1) (2026-11-05)
 
 

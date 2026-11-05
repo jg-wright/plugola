@@ -1,6 +1,6 @@
 {
   "name": "@plugola/message-bus",
-  "version": "9.0.0",
+  "version": "9.0.1",
   "description": "Plugola event management",
   "type": "module",
   "exports": {
@@ -36,7 +36,7 @@
     "@johngw/async-iterator": "^4.0.1",
     "@johngw/stream": "^4.4.1",
     "@plugola/invoke": "^2.0.3",
-    "@plugola/queue": "^1.0.0",
+    "@plugola/queue": "^1.0.1",
     "@runtyping/zod-mini": "^2.0.3",
     "esbuild-decorators": "^1.0.0",
     "ts-toolbelt": "^9.6.0",
