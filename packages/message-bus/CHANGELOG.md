@@ -1,5 +1,29 @@
 # Changelog
 
+## [9.0.0](https://github.com/jg-wright/plugola/compare/message-bus-v8.0.0...message-bus-v9.0.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **message-bus:** TransportableMessageRegistry.message().as() and .command().as() now reject non-serializable payloads unless given a full codec.
+
+### Features
+
+* **message-bus:** add a delivery dispatcher and relax local payload types ([25a23c5](https://github.com/jg-wright/plugola/commit/25a23c5c5044bcc88f5319e178b952b89d69bbdd))
+* **message-bus:** add a postMessage channel for browser workers ([213f4bb](https://github.com/jg-wright/plugola/commit/213f4bb8eac3d3136bdce5bf81f37e248e474b50))
+* **message-bus:** add a queue to the bus ([57ff752](https://github.com/jg-wright/plugola/commit/57ff7523d26d3315a28c94473cda69953e3ca369))
+* **message-bus:** add existing factories to a transportable registry ([8ef81cf](https://github.com/jg-wright/plugola/commit/8ef81cf07c0df0ea5ae216f67b327b488536f99f))
+* **message-bus:** add onResponderError and observe; drop the dispatcher ([9dc5579](https://github.com/jg-wright/plugola/commit/9dc5579d9234fb43c49c94d8054d78b5dcd6f272))
+* **message-bus:** tell observers when an emit is an invoked command ([353802b](https://github.com/jg-wright/plugola/commit/353802bb9008a0d70a781d38a07089c1657d5e29))
+
+
+### Bug Fixes
+
+* **message-bus:** deliver what an aborted participant emitted while paused ([8a91543](https://github.com/jg-wright/plugola/commit/8a9154365c425dbe54b76b74f1b31b4370023703))
+* **message-bus:** keep delivery synchronous through synchronous interceptors ([1c3ddf2](https://github.com/jg-wright/plugola/commit/1c3ddf2f1f9c9370b69fd73a88921c617da7f029))
+* **message-bus:** make message metadata non-enumerable ([feebf46](https://github.com/jg-wright/plugola/commit/feebf4602b696703a13abc9c6d50651b62172821))
+* **message-bus:** snapshot handlers before delivering ([3a3a1cf](https://github.com/jg-wright/plugola/commit/3a3a1cf3fec07ceae2d540524cdadb3ba98bc964))
+
 ## [8.0.0](https://github.com/jg-wright/plugola/compare/message-bus-v7.1.0...message-bus-v8.0.0) (2026-11-02)
 
 

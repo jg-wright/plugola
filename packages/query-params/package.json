@@ -1,6 +1,6 @@
 {
   "name": "@plugola/query-params",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Parses location query parameters",
   "type": "module",
   "exports": {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [9.0.1](https://github.com/jg-wright/plugola/compare/store-v9.0.0...store-v9.0.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **store:** remove subscriptions when unsubscribing ([ebe84fe](https://github.com/jg-wright/plugola/commit/ebe84fe9b7aad099b158605ab6d81db29a753848))
+
 ## [9.0.0](https://github.com/jg-wright/plugola/compare/store-v8.0.3...store-v9.0.0) (2026-11-02)
 
 

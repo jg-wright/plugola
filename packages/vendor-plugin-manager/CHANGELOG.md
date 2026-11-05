@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.0.0](https://github.com/jg-wright/plugola/compare/vendor-plugin-manager-v4.0.5...vendor-plugin-manager-v5.0.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vendor-plugin-manager:** registerVendorPlugin and enableAuthorizedPlugins are replaced by declaring consent on each plugin and passing a consent source.
+
+### Features
+
+* **vendor-plugin-manager:** gate plugins on TCF consent ([079f2a7](https://github.com/jg-wright/plugola/commit/079f2a7d8d022cf8b701fa5ba8d05cc3dc18e591))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/plugin-manager bumped from 9.0.1 to 9.1.0
+  * peerDependencies
+    * @plugola/plugin-manager bumped from ^9.0.1 to ^9.1.0
+
 ## [4.0.5](https://github.com/jg-wright/plugola/compare/vendor-plugin-manager-v4.0.4...vendor-plugin-manager-v4.0.5) (2026-11-02)
 
 

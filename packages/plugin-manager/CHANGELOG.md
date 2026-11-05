@@ -1,5 +1,21 @@
 # Changelog
 
+## [9.1.0](https://github.com/jg-wright/plugola/compare/plugin-manager-v9.0.1...plugin-manager-v9.1.0) (2026-11-05)
+
+
+### Features
+
+* **plugin-manager:** add gates, plugin metadata and context signals ([63a3dc6](https://github.com/jg-wright/plugola/commit/63a3dc6772ad38fbd4934eb68293c9846e1eee91))
+* **plugin-manager:** add run onStarted callback ([c0f198f](https://github.com/jg-wright/plugola/commit/c0f198f622b2f94a5cb39842a37b948c79911a7b))
+* **plugin-manager:** check gates against a plugin-like object ([a121d10](https://github.com/jg-wright/plugola/commit/a121d106868fd033e5303d359e3dd8886848f61f))
+* **plugin-manager:** check gates one after another over the live set ([bbe2408](https://github.com/jg-wright/plugola/commit/bbe2408cd3fe12196a7dda8c101ecc03acfdcc1b))
+
+
+### Bug Fixes
+
+* **plugin-manager:** call run onStarted outside plugin error handling ([e171333](https://github.com/jg-wright/plugola/commit/e1713336b3d53b12a061a283debe8907ed40238c))
+* **plugin-manager:** share one run between a plugin and its dependers ([c97da3b](https://github.com/jg-wright/plugola/commit/c97da3b71c216097cc1310f61669479af6103f61))
+
 ## [9.0.1](https://github.com/jg-wright/plugola/compare/plugin-manager-v9.0.0...plugin-manager-v9.0.1) (2026-11-02)
 
 

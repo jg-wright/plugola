@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.0.1](https://github.com/jg-wright/plugola/compare/query-params-v4.0.0...query-params-v4.0.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **query-params:** skip a malformed parameter without losing the others ([9df8516](https://github.com/jg-wright/plugola/commit/9df851665ddf46c26c966a0fe023c4192e63fbb3))
+* **query-params:** support browsers without a process global ([f30181a](https://github.com/jg-wright/plugola/commit/f30181ac28c4fa1bfa7f6bf722744c1923f02d91))
+
 ## [4.0.0](https://github.com/jg-wright/plugola/compare/query-params-v3.0.4...query-params-v4.0.0) (2026-11-02)
 
 

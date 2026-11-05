@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.5](https://github.com/jg-wright/plugola/compare/store-logger-v3.0.4...store-logger-v3.0.5) (2026-11-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/logger bumped from 5.0.3 to 5.0.4
+    * @plugola/store bumped from 9.0.0 to 9.0.1
+  * peerDependencies
+    * @plugola/logger bumped from ^5.0.3 to ^5.0.4
+    * @plugola/store bumped from ^9.0.0 to ^9.0.1
+
 ## [3.0.4](https://github.com/jg-wright/plugola/compare/store-logger-v3.0.3...store-logger-v3.0.4) (2026-11-02)
 
 
