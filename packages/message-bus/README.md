@@ -85,7 +85,9 @@ off() // unsubscribe
 
 Participants begin paused, so nothing is delivered until the bus is resumed —
 it's safe to wire up subscriptions first. Messages emitted while a participant is
-paused are buffered and replayed when it resumes.
+paused are buffered and replayed when it resumes. `bus.resume()` replays nothing
+until every participant is running, so a buffered message meets every
+participant's interceptors and responders, whichever order they were created in.
 
 ```typescript
 const bus = new MessageBus()
