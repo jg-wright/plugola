@@ -28,6 +28,8 @@ The handler roles line up with EIP: a **Subscriber** receives messages
 (`register`), and an **Interceptor** is a Message Translator stage that can
 transform or veto a message before subscribers see it (`intercept`).
 
+See [Class diagrams](#class-diagrams) for how these fit together.
+
 ## Defining messages
 
 Define a message with `message()` and a command with `command()`. You give a wire
@@ -413,3 +415,387 @@ class WebSocketChannel implements Channel {
 Both ends build an equivalent registry from the shared contract module; the
 factories are distinct objects per runtime (identity routes locally, `$name`s
 cross the wire).
+
+## Class diagrams
+
+How the pieces fit together. Members are abridged to the public surface (plus
+the private state that explains the wiring), and generics are trimmed for
+readability. Function-shaped interfaces (a subscriber, a factory, …) show their
+call signature as `+(args)`.
+
+### Bus, participants and handlers
+
+The bus owns one `Participant` per name. A participant is a queued kernel with
+two faces: the `MessageGateway` the application holds (outbound — it writes the
+`PerformerRegistry` and publishes onto the bus) and the `MessageDispatcher` the
+bus drives (inbound — it reads the registry and runs the handlers).
+
+```mermaid
+classDiagram
+  direction TB
+
+  class Queuable {
+    <<external>>
+    +queue MethodQueue
+    +running boolean
+    +resume()
+    +pause()
+  }
+
+  class MessageBus {
+    +onResponderError ResponderErrorHandler
+    +gateway(name, abortSignal?) MessageGateway
+    +observe(observer) disposer
+    +resume(name?)
+    +pause(name?)
+    +resumeUntil(promise) Promise~void~
+    +abort(name, reason?)
+    -participants Map of name to Participant
+    -subscriberRoutes Map of factory to names
+    -responderRoutes Map of factory to names
+    -interceptorRoutes Map of factory to names
+  }
+
+  class Participant {
+    +name string
+    +abortSignal AbortSignal
+    +aborted boolean
+    +registry PerformerRegistry
+    +dispatcher MessageDispatcher
+    +gateway MessageGateway
+    +abort(reason?)
+    +onAbort(fn) disposer
+  }
+
+  class MessageGateway {
+    +name string
+    +abortSignal AbortSignal
+    +emit(message) Promise~Message~
+    +on(factory, filter?, subscriber) disposer
+    +once(factory, filter?, subscriber) disposer
+    +until(factory, filter?) Promise~Message~
+    +intercept(factory, filter?, interceptor) disposer
+    +register(commandFactory, filter?, responder) disposer
+    +invoke(command, options?) InvokeResult
+    +resume(name)
+    +pause(name)
+    +abort(name, reason?)
+    +onAbort(fn) disposer
+  }
+
+  class InvokeResult["invoke() result"] {
+    +collect() Promise~R[]~
+    +first() Promise~R~
+    +iterate() AsyncIterable~R~
+  }
+
+  class MessageDispatcher {
+    +dispatch(message)
+    +runInterceptors(message) Message or CANCEL
+    +dispatchCommand(command, context, reportError) Promise~void~
+  }
+
+  class PerformerRegistry {
+    +addSubscriber(factory, filter, subscriber) disposer
+    +addResponder(factory, filter, responder) disposer
+    +addInterceptor(factory, filter, interceptor) disposer
+    +subscribersFor(factory) Set~SelectivePerformer~
+    +respondersFor(factory) Set~SelectivePerformer~
+    +interceptorsFor(factory) Set~SelectivePerformer~
+    +clear()
+  }
+
+  class SelectivePerformer~M~ {
+    -filterEntries FilterEntries~M~
+    -performer Performer~M~
+    +perform(...args)
+  }
+
+  class Filter~M~ {
+    <<type>>
+    property → value or predicate
+  }
+
+  class Performer~M~ {
+    <<type>>
+    Subscriber or Responder or Interceptor
+  }
+
+  class Subscriber~M~ {
+    <<interface>>
+    +(message) void
+  }
+
+  class Responder~E~ {
+    <<interface>>
+    +(command, context) void
+  }
+
+  class Interceptor~M~ {
+    <<interface>>
+    +(message) Message or CANCEL or void
+  }
+
+  class ResponderContext~E~ {
+    <<interface>>
+    +send(value)
+    +signal AbortSignal
+  }
+
+  class BusObserver {
+    <<interface>>
+    +(event) void
+  }
+
+  class BusEvent {
+    <<type>>
+    emit or cancel or deliver or respond
+  }
+
+  Queuable <|-- MessageBus
+  Queuable <|-- Participant
+  MessageBus "1" *-- "*" Participant : owns by name
+  MessageBus o-- "*" BusObserver : notifies
+  BusObserver ..> BusEvent
+  Participant *-- MessageGateway : outbound face
+  Participant *-- MessageDispatcher : inbound face
+  Participant *-- PerformerRegistry
+  MessageGateway ..> MessageBus : emit / invoke / route
+  MessageGateway ..> InvokeResult : invoke returns
+  MessageBus ..> MessageDispatcher : delivers via
+  MessageGateway ..> PerformerRegistry : writes
+  MessageDispatcher ..> PerformerRegistry : reads
+  PerformerRegistry "1" *-- "*" SelectivePerformer
+  SelectivePerformer o-- Filter
+  SelectivePerformer o-- Performer
+  Subscriber ..|> Performer
+  Responder ..|> Performer
+  Interceptor ..|> Performer
+  Responder ..> ResponderContext
+```
+
+`Queuable` comes from [`@plugola/queue`](../queue).
+
+### Messages, factories and registries
+
+Messages are plain objects; their factory is the routing identity. A
+`MessageRegistry` adds name-uniqueness and a `$name` → factory lookup; a
+`TransportableMessageRegistry` also layers a codec onto each factory so it can
+cross a bridge.
+
+```mermaid
+classDiagram
+  direction TB
+
+  class messageFn["message()"] {
+    <<function>>
+    +message(name) MessageFactory
+  }
+
+  class commandFn["command()"] {
+    <<function>>
+    +command(name) CommandMessageFactory
+  }
+
+  class Named~Name~ {
+    <<interface>>
+    +$name Name
+  }
+
+  class Message {
+    <<interface>>
+    +$factory MessageFactory
+  }
+
+  class CommandMessage~R~ {
+    <<interface>>
+    +$responseType R (phantom)
+  }
+
+  class MessageFactory~T~ {
+    <<interface>>
+    +(payload?: T) Message and T
+  }
+
+  class CommandMessageFactory~R~ {
+    <<interface>>
+    +(payload?: T) CommandMessage and T
+  }
+
+  class Transportable~T~ {
+    <<interface>>
+    +$encode(message: T) unknown
+    +$decode(payload) T
+  }
+
+  class Codec~M~ {
+    <<interface>>
+    +encode(message: M) unknown
+    +decode(payload) M
+  }
+
+  class MessageRegistry {
+    +create()$ MessageRegistry
+    +combine(...registries)$ MessageRegistry
+    +messages Record of name to MessageFactory
+    +commands Record of name to CommandMessageFactory
+    +messageFactories MessageFactory[]
+    +commandFactories CommandMessageFactory[]
+    +message(name).as~T~() MessageRegistry
+    +command(name).as~T~() MessageRegistry
+    +messageFactoryFor(name) MessageFactory
+    +commandFactoryFor(name) CommandMessageFactory
+  }
+
+  class TransportableMessageRegistry {
+    +create()$ TransportableMessageRegistry
+    +message(name).as~T~(codec?) TransportableMessageRegistry
+    +command(name).as~T~(codec?) TransportableMessageRegistry
+    +addMessage(factory, codec?) TransportableMessageRegistry
+    +addCommand(factory, codec?) TransportableMessageRegistry
+  }
+
+  Named <|-- Message
+  Named <|-- MessageFactory
+  Named <|-- CommandMessageFactory
+  Message <|-- CommandMessage
+  messageFn ..> MessageFactory : creates
+  commandFn ..> CommandMessageFactory : creates
+  MessageFactory ..> Message : builds
+  CommandMessageFactory ..> CommandMessage : builds
+  Message --> MessageFactory : $factory
+  MessageRegistry <|-- TransportableMessageRegistry
+  MessageRegistry o-- "*" MessageFactory : messages
+  MessageRegistry o-- "*" CommandMessageFactory : commands
+  TransportableMessageRegistry ..> Transportable : makeTransportable()
+  Transportable ..> Codec : default or custom
+```
+
+### Transports
+
+A `MessagingBridge` joins a bus as an ordinary participant and relays every
+factory in its `TransportableMessageRegistry` over a `Channel` as `Frame`s.
+
+```mermaid
+classDiagram
+  direction TB
+
+  class MessagingBridge {
+    +MessagingBridge(bus, channel, registry, options?)
+    +abort(reason?)
+    -gateway MessageGateway
+    -pending Map of correlationId to PendingCommand
+    -inbound Map of correlationId to AbortController
+  }
+
+  class MessagingBridgeOptions {
+    <<interface>>
+    +correlationId() string
+    +name string
+  }
+
+  class Channel {
+    <<interface>>
+    +send(frame: Frame)
+    +receive(handler) disposer
+  }
+
+  class LoopbackChannel {
+    +pair()$ two connected ends
+    +send(frame)
+    +receive(handler) disposer
+  }
+
+  class PortChannel {
+    +PortChannel(port: PortLike)
+    +send(frame)
+    +receive(handler) disposer
+  }
+
+  class PostMessageChannel {
+    +PostMessageChannel(endpoint: PostMessageEndpoint)
+    +send(frame)
+    +receive(handler) disposer
+  }
+
+  class PortLike {
+    <<interface>>
+    +postMessage(value)
+    +on('message', listener)
+    +off('message', listener)
+  }
+
+  class PostMessageEndpoint {
+    <<interface>>
+    +postMessage(message)
+    +addEventListener('message', listener)
+    +removeEventListener('message', listener)
+    +start()
+  }
+
+  class Frame {
+    <<union>>
+    +kind
+  }
+
+  class MessageFrame {
+    +kind 'message'
+    +name string
+    +payload unknown
+  }
+
+  class CommandFrame {
+    +kind 'command'
+    +name string
+    +payload unknown
+    +correlationId string
+  }
+
+  class ResponseFrame {
+    +kind 'response'
+    +correlationId string
+    +value unknown
+  }
+
+  class ResponseEndFrame {
+    +kind 'response-end'
+    +correlationId string
+  }
+
+  class ResponseErrorFrame {
+    +kind 'response-error'
+    +correlationId string
+    +error SerializedError
+  }
+
+  class AbortFrame {
+    +kind 'abort'
+    +correlationId string
+    +reason string
+  }
+
+  class SerializedError {
+    +name string
+    +message string
+    +stack string
+  }
+
+  MessagingBridge --> MessageBus : joins as a participant
+  MessagingBridge *-- MessageGateway
+  MessagingBridge o-- Channel
+  MessagingBridge o-- TransportableMessageRegistry : forward set and codecs
+  MessagingBridge ..> MessagingBridgeOptions
+  Channel <|.. LoopbackChannel
+  Channel <|.. PortChannel
+  Channel <|.. PostMessageChannel
+  PortChannel o-- PortLike
+  PostMessageChannel o-- PostMessageEndpoint
+  Channel ..> Frame : carries
+  Frame <|-- MessageFrame
+  Frame <|-- CommandFrame
+  Frame <|-- ResponseFrame
+  Frame <|-- ResponseEndFrame
+  Frame <|-- ResponseErrorFrame
+  Frame <|-- AbortFrame
+  ResponseErrorFrame *-- SerializedError
+```
