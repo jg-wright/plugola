@@ -1,5 +1,12 @@
 # Changelog
 
+## [9.0.2](https://github.com/jg-wright/plugola/compare/message-bus-v9.0.1...message-bus-v9.0.2) (2026-11-06)
+
+
+### Bug Fixes
+
+* **message-bus:** resume every participant before replaying buffered messages ([a905c45](https://github.com/jg-wright/plugola/commit/a905c45f3d3fa3e13d97228fb67fa73efc64c352))
+
 ## [9.0.1](https://github.com/jg-wright/plugola/compare/message-bus-v9.0.0...message-bus-v9.0.1) (2026-11-05)
 
 
