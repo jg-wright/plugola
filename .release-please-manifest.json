@@ -1,12 +1,12 @@
 {
   "packages/graph": "3.0.3",
   "packages/logger": "5.0.4",
-  "packages/message-bus": "9.0.0",
+  "packages/message-bus": "9.0.2",
   "packages/plugin-manager": "9.1.0",
   "packages/query-params": "4.0.1",
-  "packages/queue": "1.0.0",
-  "packages/store": "9.0.1",
-  "packages/store-logger": "3.0.5",
-  "packages/test": "3.1.0",
+  "packages/queue": "1.0.1",
+  "packages/store": "9.0.2",
+  "packages/store-logger": "3.0.6",
+  "packages/test": "3.1.2",
   "packages/vendor-plugin-manager": "5.0.0"
 }

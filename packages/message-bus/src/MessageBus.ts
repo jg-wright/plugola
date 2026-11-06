@@ -264,12 +264,17 @@ export class MessageBus extends Queuable {
    * Participants begin paused, so this is also how you first bring the bus to
    * life. With a `name`, resumes just that participant; with no argument, resumes
    * every participant on the bus.
+   *
+   * Resuming every participant replays nothing until they are all running:
+   * what each one buffered waits in the bus's own queue until the last has
+   * resumed, so no buffered message skips a paused participant's interceptors
+   * or responders.
    */
   override resume(name?: string) {
     if (name === undefined) {
-      super.resume()
       for (const participant of this.#participants.values())
         participant.resume()
+      super.resume()
     } else this.#participants.get(name)?.resume()
   }
 
