@@ -2,8 +2,7 @@
   "name": "@plugola/mono-repo",
   "private": true,
   "version": "0.0.0",
-  "description": "The MOL Ads mono-repo",
-  "main": "index.js",
+  "description": "Small, composable TypeScript packages for building plugin-based applications",
   "workspaces": [
     "packages/*"
   ],
@@ -14,8 +13,12 @@
     "start": "tsc --build --watch",
     "test": "npm --workspaces test"
   },
-  "author": "",
-  "license": "UNLICENSED",
+  "author": "John Wright",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jg-wright/plugola.git"
+  },
   "bugs": {
     "url": "https://github.com/jg-wright/plugola/issues"
   },
@@ -33,7 +36,7 @@
   },
   "lint-staged": {
     "*.{md,json,js,jsx,ts,tsx,yml,yaml}": [
-      "yarn prettier --write"
+      "prettier --write"
     ]
   },
   "dependencies": {
