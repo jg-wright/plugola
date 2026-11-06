@@ -305,6 +305,141 @@ await testManager.run()
 
 ## API overview
 
+### Class diagram
+
+Members are abridged to the public surface (plus the private state that
+explains the wiring). The manager's type parameters — `ExtraContext`,
+`ExtraEnableContext`, `ExtraRunContext` and `PluginMeta` — are omitted; they
+are what the `add*Context` options return and what plugins (and so gates) may
+carry, and they are intersected into the contexts a plugin's hooks receive.
+
+```mermaid
+classDiagram
+  direction TB
+
+  class PluginManager {
+    +PluginManager(options?)
+    +enabledPlugins string[]
+    +registerPlugin(plugin) void
+    +registerPlugin(name, plugin) void
+    +enablePlugins(names) Promise~void~
+    +enableAllPlugins() Promise~void~
+    +disablePlugins(names, force?) number
+    +disableAllPlugins() number
+    +run(options?) Promise~void~
+    +addGate(gate) disposer
+    +checkGates(plugin, phase?) Promise~boolean~
+    +recheckGates() Promise~string[]~
+    +withOptions(options) PluginManager
+    -plugins Record of name to Plugin
+    -gates Set~Gate~
+    -dependencyGraph DependencyGraph
+    -enabledPlugins Set~string~
+    -abortControllers WeakMap of Plugin to AbortController
+  }
+
+  class PluginManagerOptions {
+    <<interface>>
+    +addContext(name, options) ExtraContext
+    +addEnableContext(name, options) ExtraEnableContext
+    +addRunContext(name, options) ExtraRunContext
+    +gates Gate[]
+    +pluginTimeout number
+    +onPluginGated(plugin, phase)
+    +onUnknownPlugin(name, phase)
+    +onPluginError(error, plugin, phase)
+  }
+
+  class RunOptions {
+    <<interface>>
+    +onStarted()
+  }
+
+  class Plugin {
+    <<interface>>
+    +name string
+    +dependencies string[]
+    +optionalDependencies string[]
+    +enableTimeout number
+    +enable(context) any
+    +run(context) any
+  }
+
+  class Gate {
+    <<interface>>
+    +(plugin, phase) boolean or Promise~boolean~
+  }
+
+  class GatePhase {
+    <<enumeration>>
+    enable
+    run
+  }
+
+  class EnableContext {
+    <<interface>>
+    +signal AbortSignal
+    +enablePlugins(names, force?) Promise~void~
+    +disablePlugins(names, force?) number
+    +addGate(gate) disposer
+    +checkGates(plugin) Promise~boolean~
+  }
+
+  class RunContext {
+    <<interface>>
+    +signal AbortSignal
+  }
+
+  class ContextOptions {
+    <<interface>>
+    +signal AbortSignal
+  }
+
+  class Graph~T~ {
+    <<external>>
+    +addEdge(name, source, destination)
+    +bfs(node, edge) Generator~T~
+  }
+
+  class DependencyGraph~T~ {
+    +addDependency(source, dependency)
+    +addOptionalDependency(source, dependency)
+    +dependencies(node) Generator~T~
+    +dependers(node) Generator~T~
+    +optionalDependencies(node) Generator~T~
+    +optionalDependers(node) Generator~T~
+  }
+
+  class PluginManagerEnableContext~PM~ {
+    <<type>>
+    EnableContext and the manager's extra context
+  }
+
+  class PluginManagerRunContext~PM~ {
+    <<type>>
+    RunContext and the manager's extra context
+  }
+
+  PluginManager *-- PluginManagerOptions
+  PluginManager ..> RunOptions : run()
+  PluginManager "1" o-- "*" Plugin : registers
+  PluginManager o-- "*" Gate
+  PluginManager *-- DependencyGraph
+  Graph <|-- DependencyGraph
+  DependencyGraph o-- "*" Plugin : nodes
+  PluginManager ..> EnableContext : builds per plugin
+  PluginManager ..> RunContext : builds per plugin
+  PluginManagerOptions ..> ContextOptions
+  Plugin ..> EnableContext : enable(context)
+  Plugin ..> RunContext : run(context)
+  EnableContext ..> Gate : addGate
+  Gate ..> GatePhase
+  PluginManagerEnableContext ..> EnableContext
+  PluginManagerRunContext ..> RunContext
+```
+
+`Graph` comes from [`@plugola/graph`](../graph).
+
 ### `new PluginManager(options?)`
 
 Options ([`PluginManagerOptions`](src/PluginManager.ts)):
