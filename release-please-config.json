@@ -4,7 +4,6 @@
   "include-v-in-tag": true,
   "packages": {
     "packages/graph": {},
-    "packages/invoke": {},
     "packages/logger": {},
     "packages/message-bus": {},
     "packages/plugin-manager": {},
@@ -12,7 +11,6 @@
     "packages/queue": {},
     "packages/store": {},
     "packages/store-logger": {},
-    "packages/streams": {},
     "packages/test": {},
     "packages/vendor-plugin-manager": {}
   },

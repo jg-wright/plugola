@@ -1,6 +1,5 @@
 {
   "packages/graph": "3.0.3",
-  "packages/invoke": "2.0.3",
   "packages/logger": "5.0.4",
   "packages/message-bus": "9.0.0",
   "packages/plugin-manager": "9.1.0",
@@ -8,7 +7,6 @@
   "packages/queue": "1.0.0",
   "packages/store": "9.0.1",
   "packages/store-logger": "3.0.5",
-  "packages/streams": "2.0.3",
   "packages/test": "3.1.0",
   "packages/vendor-plugin-manager": "5.0.0"
 }

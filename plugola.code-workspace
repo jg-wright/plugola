@@ -9,10 +9,6 @@
       "path": "packages/graph",
     },
     {
-      "name": "📦 @plugola/invoke",
-      "path": "packages/invoke",
-    },
-    {
       "name": "📦 @plugola/logger",
       "path": "packages/logger",
     },
@@ -39,10 +35,6 @@
     {
       "name": "📦 @plugola/store-logger",
       "path": "packages/store-logger",
-    },
-    {
-      "name": "📦 @plugola/streams",
-      "path": "packages/streams",
     },
     {
       "name": "📦 @plugola/test",
