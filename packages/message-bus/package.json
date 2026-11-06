@@ -35,7 +35,6 @@
     "@johngw/async": "^5.0.1",
     "@johngw/async-iterator": "^4.0.1",
     "@johngw/stream": "^4.4.1",
-    "@plugola/invoke": "^2.0.3",
     "@plugola/queue": "^1.0.1",
     "@runtyping/zod-mini": "^2.0.3",
     "esbuild-decorators": "^1.0.0",

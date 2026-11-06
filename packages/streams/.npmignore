@@ -1,6 +1,0 @@
-!dist
-*.md
-node_modules
-src
-test
-tsconfig.*

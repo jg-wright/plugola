@@ -22,7 +22,6 @@
   "include": [],
   "references": [
     { "path": "packages/graph" },
-    { "path": "packages/invoke" },
     { "path": "packages/logger" },
     { "path": "packages/message-bus" },
     { "path": "packages/plugin-manager" },
@@ -30,7 +29,6 @@
     { "path": "packages/queue" },
     { "path": "packages/store" },
     { "path": "packages/store-logger" },
-    { "path": "packages/streams" },
     { "path": "packages/test" },
     { "path": "packages/vendor-plugin-manager" }
   ]
