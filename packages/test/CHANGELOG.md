@@ -1,5 +1,34 @@
 # Changelog
 
+## [4.0.0](https://github.com/jg-wright/plugola/compare/test-v3.1.2...test-v4.0.0) (2026-11-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **test:** the root export no longer provides testPlugin. Import it from @plugola/test/vitest (or @plugola/test/node) instead.
+
+### Features
+
+* **test:** add a Jest entry point ([7c87b2e](https://github.com/jg-wright/plugola/commit/7c87b2e88880eaf6d2b34b6a0106a5b49c6dd3b4))
+* **test:** make testPlugin runner-agnostic ([6043c5f](https://github.com/jg-wright/plugola/commit/6043c5f32806398ed357f7eb61087034304b3898))
+
+
+### Bug Fixes
+
+* **test:** fail a test when a plugin's hook throws ([e9d2e12](https://github.com/jg-wright/plugola/commit/e9d2e12a02ce2a73d1efd6b9a537424de62ac1f6))
+* **test:** fail a test when a plugin's hook throws ([9fe9d71](https://github.com/jg-wright/plugola/commit/9fe9d71ad93f28fa62a23509bec12f7ae5795259))
+* **test:** fail tests when a plugin hook throws ([765e56a](https://github.com/jg-wright/plugola/commit/765e56a054610f27820bc1adca08c086f880c3f2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/message-bus bumped from ^9.0.2 to ^9.0.3
+    * @plugola/plugin-manager bumped from ^9.1.0 to ^9.2.0
+  * peerDependencies
+    * @plugola/plugin-manager bumped from ^9.1.0 to ^9.2.0
+
 ## [3.1.2](https://github.com/jg-wright/plugola/compare/test-v3.1.1...test-v3.1.2) (2026-11-06)
 
 

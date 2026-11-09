@@ -1,5 +1,12 @@
 # Changelog
 
+## [9.0.3](https://github.com/jg-wright/plugola/compare/message-bus-v9.0.2...message-bus-v9.0.3) (2026-11-09)
+
+
+### Bug Fixes
+
+* **message-bus:** drop unused @plugola/invoke dependency ([aebede5](https://github.com/jg-wright/plugola/commit/aebede58367c51189bec76eee10a3befcb1286b5))
+
 ## [9.0.2](https://github.com/jg-wright/plugola/compare/message-bus-v9.0.1...message-bus-v9.0.2) (2026-11-06)
 
 
