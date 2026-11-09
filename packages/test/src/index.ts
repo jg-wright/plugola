@@ -113,11 +113,20 @@ function createPluginManager(
   })
 
   if ('pluginManager' in testPlugin)
-    return testPlugin.pluginManager.withOptions({ addContext })
+    return testPlugin.pluginManager.withOptions({ addContext, onPluginError })
 
   return new PluginManager({
+    onPluginError,
     addContext,
     addEnableContext: testPlugin.enableContext,
     addRunContext: testPlugin.runContext,
   })
+}
+
+/**
+ * The plugin manager isolates and logs plugin errors by default, which would
+ * swallow a failed assertion; rethrow so `init` / `run` fail instead.
+ */
+function onPluginError(error: unknown): never {
+  throw error
 }
