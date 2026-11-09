@@ -4,13 +4,15 @@
   "description": "Test plugola plugins",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./vitest": "./dist/vitest.js",
+    "./node": "./dist/node.js"
   },
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean && rimraf dist",
     "start": "tsc --watch --preserveWatchOutput",
-    "test": "vitest --run"
+    "test": "vitest --run && node --test test/node-runner.ts"
   },
   "license": "MIT",
   "bugs": {
@@ -35,5 +37,10 @@
   "peerDependencies": {
     "@plugola/plugin-manager": "^9.1.0",
     "vitest": ">=3.2.4"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   }
 }

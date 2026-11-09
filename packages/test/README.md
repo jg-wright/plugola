@@ -2,9 +2,30 @@
 
 > Test plugola plugins
 
-`testPlugin` declares a vitest `describe` per entry in `tests`. Each one enables
-the plugin under test alongside that entry's plugins (`init`), then runs them
+`testPlugin` declares a `describe` per entry in `tests`. Each one enables the
+plugin under test alongside that entry's plugins (`init`), then runs them
 (`run`), so the entry's plugins can drive and assert on the plugin under test.
+
+## Choosing a test runner
+
+Import `testPlugin` from the entry point for your runner:
+
+```typescript
+import { testPlugin } from '@plugola/test/vitest' // vitest
+import { testPlugin } from '@plugola/test/node' // node:test
+```
+
+For any other runner, build one with `createTestPlugin`, passing its `describe`,
+`test`, and once-per-`describe` setup and teardown hooks:
+
+```typescript
+import { createTestPlugin } from '@plugola/test'
+
+const testPlugin = createTestPlugin({ describe, test, beforeAll, afterAll })
+```
+
+`vitest` is an optional peer dependency — install it only if you use
+`@plugola/test/vitest`.
 
 ## Testing a plugin on its own manager
 

@@ -24,10 +24,10 @@ independently to npm under the `@plugola` scope.
 
 ### Plugin tooling
 
-| Package                                                            | What it does                                                                                                  |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| [`@plugola/vendor-plugin-manager`](packages/vendor-plugin-manager) | A plugin manager that only enables and runs the plugins a user has consented to (IAB TCF v2).                 |
-| [`@plugola/test`](packages/test)                                   | `testPlugin()`: vitest helpers for testing a plugin on its own, or as registered on your real plugin manager. |
+| Package                                                            | What it does                                                                                                                                   |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@plugola/vendor-plugin-manager`](packages/vendor-plugin-manager) | A plugin manager that only enables and runs the plugins a user has consented to (IAB TCF v2).                                                  |
+| [`@plugola/test`](packages/test)                                   | `testPlugin()`: helpers (vitest, node:test, or your own runner) for testing a plugin on its own, or as registered on your real plugin manager. |
 
 ### Utilities
 

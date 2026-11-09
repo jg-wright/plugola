@@ -1,7 +1,7 @@
 import { expect, expectTypeOf } from 'vitest'
 import { command, MessageBus } from '@plugola/message-bus'
 import { PluginManager } from '@plugola/plugin-manager'
-import { testPlugin } from '../src/index.js'
+import { testPlugin } from '../src/vitest.js'
 
 const Mung = command<{}, string>('mung')
 const messageBus = new MessageBus()

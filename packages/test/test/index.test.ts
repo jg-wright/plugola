@@ -1,5 +1,5 @@
 import { expect } from 'vitest'
-import { testPlugin } from '../src/index.js'
+import { testPlugin } from '../src/vitest.js'
 import { command, MessageBus } from '@plugola/message-bus'
 
 testPlugin({
