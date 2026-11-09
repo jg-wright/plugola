@@ -1,6 +1,6 @@
 {
   "name": "@plugola/vendor-plugin-manager",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "A plugin manager that only enables the plugins a user has consented to",
   "type": "module",
   "exports": {
@@ -21,7 +21,7 @@
   },
   "homepage": "https://github.com/jg-wright/plugola#readme",
   "devDependencies": {
-    "@plugola/plugin-manager": "9.1.0",
+    "@plugola/plugin-manager": "9.2.0",
     "@types/node": "26.6.6",
     "@vitest/runner": "4.1.11",
     "rimraf": "6.1.4",
@@ -32,6 +32,6 @@
     "tslib": "^2.9.1"
   },
   "peerDependencies": {
-    "@plugola/plugin-manager": "^9.1.0"
+    "@plugola/plugin-manager": "^9.2.0"
   }
 }

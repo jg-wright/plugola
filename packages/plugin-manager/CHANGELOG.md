@@ -1,5 +1,13 @@
 # Changelog
 
+## [9.2.0](https://github.com/jg-wright/plugola/compare/plugin-manager-v9.1.0...plugin-manager-v9.2.0) (2026-11-09)
+
+
+### Features
+
+* **plugin-manager:** allplugins api ([60d5e0c](https://github.com/jg-wright/plugola/commit/60d5e0ccbecb45132a7ac6f225d804768d093831))
+* **plugin-manager:** allplugins api ([16987f9](https://github.com/jg-wright/plugola/commit/16987f9bd128c4fb264364033bdaa59c3d9f8ad0))
+
 ## [9.1.0](https://github.com/jg-wright/plugola/compare/plugin-manager-v9.0.1...plugin-manager-v9.1.0) (2026-11-05)
 
 
