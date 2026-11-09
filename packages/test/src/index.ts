@@ -12,6 +12,11 @@ export type { AnyPluginManager, HostPlugin, TestHostPlugin, TestPlugin }
 /**
  * Declares a `describe` per entry in `tests`, each enabling then running the
  * plugin under test alongside that entry's plugins.
+ *
+ * The plugin manager isolates an error thrown from a plugin's hook, so one
+ * plugin can't take down the others. Here, such an error (e.g. a failed
+ * `expect`) fails the step it was thrown in: `init` for `enable`, `run` for
+ * `run`.
  */
 export function testPlugin<
   TestContext extends Record<string, unknown>,
@@ -30,8 +35,7 @@ export function testPlugin<
 
 export function testPlugin(
   testPlugin:
-    | TestPlugin<any, any, any, any>
-    | TestHostPlugin<AnyPluginManager, any, any>,
+    TestPlugin<any, any, any, any> | TestHostPlugin<AnyPluginManager, any, any>,
 ) {
   for (const [testName, $plugins] of Object.entries(testPlugin.tests)) {
     const plugins = Array.isArray($plugins) ? $plugins : [$plugins]
@@ -40,10 +44,15 @@ export function testPlugin(
       let testContext: Record<string, unknown>
       let pluginManager: AnyPluginManager
       let pluginNames: string[]
+      const errors: PluginErrors = { enable: [], run: [] }
 
       beforeAll(() => {
         testContext = testPlugin.testContext?.() ?? {}
-        pluginManager = createPluginManager(testPlugin, () => testContext)
+        pluginManager = createPluginManager(
+          testPlugin,
+          () => testContext,
+          (error, _, phase) => errors[phase].push(error),
+        )
 
         const { plugin } = testPlugin
         if (typeof plugin !== 'string') pluginManager.registerPlugin(plugin)
@@ -63,6 +72,7 @@ export function testPlugin(
         const p = pluginManager.enablePlugins(pluginNames)
         if (testPlugin.afterInit) await testPlugin.afterInit(testContext, p)
         else await p
+        throwAll(errors.enable)
       })
 
       test('run', async () => {
@@ -72,6 +82,7 @@ export function testPlugin(
         })
         if (testPlugin.afterRun) await testPlugin.afterRun(testContext, p)
         else await p
+        throwAll(errors.run)
       })
     })
   }
@@ -79,9 +90,9 @@ export function testPlugin(
 
 function createPluginManager(
   testPlugin:
-    | TestPlugin<any, any, any, any>
-    | TestHostPlugin<AnyPluginManager, any, any>,
+    TestPlugin<any, any, any, any> | TestHostPlugin<AnyPluginManager, any, any>,
   getTestContext: () => Record<string, unknown>,
+  onPluginError: OnPluginError,
 ): AnyPluginManager {
   const addContext = (pluginName: string) => ({
     ...getTestContext(),
@@ -89,11 +100,24 @@ function createPluginManager(
   })
 
   if ('pluginManager' in testPlugin)
-    return testPlugin.pluginManager.withOptions({ addContext })
+    return testPlugin.pluginManager.withOptions({ addContext, onPluginError })
 
   return new PluginManager({
     addContext,
     addEnableContext: testPlugin.enableContext,
     addRunContext: testPlugin.runContext,
+    onPluginError,
   })
 }
+
+function throwAll(errors: unknown[]) {
+  if (errors.length === 1) throw errors[0]
+  if (errors.length > 1)
+    throw new AggregateError(errors, `${errors.length} plugins failed`)
+}
+
+type OnPluginError = NonNullable<
+  ConstructorParameters<typeof PluginManager>[0]
+>['onPluginError']
+
+type PluginErrors = Record<'enable' | 'run', unknown[]>
