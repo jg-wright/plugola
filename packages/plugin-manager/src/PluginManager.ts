@@ -444,6 +444,10 @@ export default class PluginManager<
     await this.#enablePlugins(new Set(pluginNames))
   }
 
+  get allPlugins() {
+    return Object.keys(this.#plugins)
+  }
+
   /**
    * Enable every plugin named in a single batch.
    *
