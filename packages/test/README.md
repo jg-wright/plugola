@@ -12,6 +12,7 @@ Import `testPlugin` from the entry point for your runner:
 
 ```typescript
 import { testPlugin } from '@plugola/test/vitest' // vitest
+import { testPlugin } from '@plugola/test/jest' // Jest
 import { testPlugin } from '@plugola/test/node' // node:test
 ```
 
@@ -24,8 +25,12 @@ import { createTestPlugin } from '@plugola/test'
 const testPlugin = createTestPlugin({ describe, test, beforeAll, afterAll })
 ```
 
-`vitest` is an optional peer dependency — install it only if you use
-`@plugola/test/vitest`.
+`vitest` and `@jest/globals` are optional peer dependencies — install the one
+for the entry point you use.
+
+This package is ESM-only, so under Jest it needs
+[ESM support](https://jestjs.io/docs/ecmascript-modules) (run Jest with
+`--experimental-vm-modules`).
 
 ## Testing a plugin on its own manager
 

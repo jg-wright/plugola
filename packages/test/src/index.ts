@@ -9,8 +9,9 @@ import type {
 export type { AnyPluginManager, HostPlugin, TestHostPlugin, TestPlugin }
 
 /**
- * The parts of a test runner that `testPlugin` needs. vitest and `node:test`
- * both fit — see `@plugola/test/vitest` and `@plugola/test/node`.
+ * The parts of a test runner that `testPlugin` needs. vitest, Jest and
+ * `node:test` all fit — see `@plugola/test/vitest`, `@plugola/test/jest` and
+ * `@plugola/test/node`.
  */
 export interface TestRunner {
   describe(name: string, fn: () => void): unknown
@@ -18,7 +19,7 @@ export interface TestRunner {
   /** Runs once before the tests in the enclosing `describe`. */
   beforeAll(fn: () => void): unknown
   /** Runs once after the tests in the enclosing `describe`. */
-  afterAll(fn: () => unknown): unknown
+  afterAll(fn: () => void | Promise<unknown>): unknown
 }
 
 /**
@@ -91,7 +92,9 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
           }
         })
 
-        afterAll(() => pluginManager.disableAllPlugins())
+        afterAll(() => {
+          pluginManager.disableAllPlugins()
+        })
 
         test('init', async () => {
           const p = pluginManager.enablePlugins(pluginNames)
