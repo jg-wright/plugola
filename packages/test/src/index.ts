@@ -1,5 +1,4 @@
 import { PluginManager } from '@plugola/plugin-manager'
-import { afterAll, beforeAll, describe, test } from 'vitest'
 import type {
   AnyPluginManager,
   HostPlugin,
@@ -10,6 +9,20 @@ import type {
 export type { AnyPluginManager, HostPlugin, TestHostPlugin, TestPlugin }
 
 /**
+ * The parts of a test runner that `testPlugin` needs. vitest, Jest and
+ * `node:test` all fit — see `@plugola/test/vitest`, `@plugola/test/jest` and
+ * `@plugola/test/node`.
+ */
+export interface TestRunner {
+  describe(name: string, fn: () => void): unknown
+  test(name: string, fn: () => Promise<void>): unknown
+  /** Runs once before the tests in the enclosing `describe`. */
+  beforeAll(fn: () => void): unknown
+  /** Runs once after the tests in the enclosing `describe`. */
+  afterAll(fn: () => void | Promise<unknown>): unknown
+}
+
+/**
  * Declares a `describe` per entry in `tests`, each enabling then running the
  * plugin under test alongside that entry's plugins.
  *
@@ -18,73 +31,89 @@ export type { AnyPluginManager, HostPlugin, TestHostPlugin, TestPlugin }
  * `expect`) fails the step it was thrown in: `init` for `enable`, `run` for
  * `run`.
  */
-export function testPlugin<
-  TestContext extends Record<string, unknown>,
-  PluginContext extends Record<string, unknown>,
-  EnableContext extends Record<string, unknown>,
-  RunContext extends Record<string, unknown>,
->(
-  testPlugin: TestPlugin<TestContext, PluginContext, EnableContext, RunContext>,
-): void
+export interface TestPluginFn {
+  <
+    TestContext extends Record<string, unknown>,
+    PluginContext extends Record<string, unknown>,
+    EnableContext extends Record<string, unknown>,
+    RunContext extends Record<string, unknown>,
+  >(
+    testPlugin: TestPlugin<
+      TestContext,
+      PluginContext,
+      EnableContext,
+      RunContext
+    >,
+  ): void
+  <
+    PM extends AnyPluginManager,
+    TestContext extends Record<string, unknown>,
+    PluginContext extends Record<string, unknown>,
+  >(
+    testPlugin: TestHostPlugin<PM, TestContext, PluginContext>,
+  ): void
+}
 
-export function testPlugin<
-  PM extends AnyPluginManager,
-  TestContext extends Record<string, unknown>,
-  PluginContext extends Record<string, unknown>,
->(testPlugin: TestHostPlugin<PM, TestContext, PluginContext>): void
+/** Builds a `testPlugin` that declares its tests with the given runner. */
+export function createTestPlugin(runner: TestRunner): TestPluginFn {
+  const { describe, test, beforeAll, afterAll } = runner
 
-export function testPlugin(
-  testPlugin:
-    TestPlugin<any, any, any, any> | TestHostPlugin<AnyPluginManager, any, any>,
-) {
-  for (const [testName, $plugins] of Object.entries(testPlugin.tests)) {
-    const plugins = Array.isArray($plugins) ? $plugins : [$plugins]
+  return function testPlugin(
+    testPlugin:
+      | TestPlugin<any, any, any, any>
+      | TestHostPlugin<AnyPluginManager, any, any>,
+  ) {
+    for (const [testName, $plugins] of Object.entries(testPlugin.tests)) {
+      const plugins = Array.isArray($plugins) ? $plugins : [$plugins]
 
-    describe(testName, () => {
-      let testContext: Record<string, unknown>
-      let pluginManager: AnyPluginManager
-      let pluginNames: string[]
-      const errors: PluginErrors = { enable: [], run: [] }
+      describe(testName, () => {
+        let testContext: Record<string, unknown>
+        let pluginManager: AnyPluginManager
+        let pluginNames: string[]
+        const errors: PluginErrors = { enable: [], run: [] }
 
-      beforeAll(() => {
-        testContext = testPlugin.testContext?.() ?? {}
-        pluginManager = createPluginManager(
-          testPlugin,
-          () => testContext,
-          (error, _, phase) => errors[phase].push(error),
-        )
+        beforeAll(() => {
+          testContext = testPlugin.testContext?.() ?? {}
+          pluginManager = createPluginManager(
+            testPlugin,
+            () => testContext,
+            (error, _, phase) => errors[phase].push(error),
+          )
 
-        const { plugin } = testPlugin
-        if (typeof plugin !== 'string') pluginManager.registerPlugin(plugin)
-        pluginNames = [typeof plugin === 'string' ? plugin : plugin.name]
+          const { plugin } = testPlugin
+          if (typeof plugin !== 'string') pluginManager.registerPlugin(plugin)
+          pluginNames = [typeof plugin === 'string' ? plugin : plugin.name]
 
-        for (let i = 0; i < plugins.length; i++) {
-          const plugin = plugins[i]
-          const name = plugin.name ?? `test ${i}`
-          pluginManager.registerPlugin({ ...plugin, name })
-          pluginNames.push(name)
-        }
-      })
-
-      afterAll(() => pluginManager.disableAllPlugins())
-
-      test('init', async () => {
-        const p = pluginManager.enablePlugins(pluginNames)
-        if (testPlugin.afterInit) await testPlugin.afterInit(testContext, p)
-        else await p
-        throwAll(errors.enable)
-      })
-
-      test('run', async () => {
-        const { onStarted } = testPlugin
-        const p = pluginManager.run({
-          onStarted: onStarted && (() => onStarted(testContext)),
+          for (let i = 0; i < plugins.length; i++) {
+            const plugin = plugins[i]
+            const name = plugin.name ?? `test ${i}`
+            pluginManager.registerPlugin({ ...plugin, name })
+            pluginNames.push(name)
+          }
         })
-        if (testPlugin.afterRun) await testPlugin.afterRun(testContext, p)
-        else await p
-        throwAll(errors.run)
+
+        afterAll(() => {
+          pluginManager.disableAllPlugins()
+        })
+
+        test('init', async () => {
+          const p = pluginManager.enablePlugins(pluginNames)
+          if (testPlugin.afterInit) await testPlugin.afterInit(testContext, p)
+          else await p
+          throwAll(errors.enable)
+        })
+
+        test('run', async () => {
+          const { onStarted } = testPlugin
+          const p = pluginManager.run({
+            onStarted: onStarted && (() => onStarted(testContext)),
+          })
+          if (testPlugin.afterRun) await testPlugin.afterRun(testContext, p)
+          else await p
+          throwAll(errors.run)
+        })
       })
-    })
+    }
   }
 }
 

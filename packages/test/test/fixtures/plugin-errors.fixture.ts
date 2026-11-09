@@ -1,7 +1,7 @@
 // Run by ../plugin-errors.test.ts, which asserts how each of these tests ends.
 import { expect } from 'vitest'
 import { PluginManager } from '@plugola/plugin-manager'
-import { testPlugin } from '../../src/index.js'
+import { testPlugin } from '../../src/vitest.js'
 
 testPlugin({
   plugin: { name: 'The plugin' },

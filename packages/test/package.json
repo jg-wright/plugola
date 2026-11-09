@@ -4,13 +4,16 @@
   "description": "Test plugola plugins",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./jest": "./dist/jest.js",
+    "./node": "./dist/node.js",
+    "./vitest": "./dist/vitest.js"
   },
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean && rimraf dist",
     "start": "tsc --watch --preserveWatchOutput",
-    "test": "vitest --run"
+    "test": "vitest --run && node --test test/node-runner.ts && NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "license": "MIT",
   "bugs": {
@@ -21,10 +24,12 @@
   },
   "homepage": "https://github.com/jg-wright/plugola#readme",
   "devDependencies": {
+    "@jest/globals": "30.5.2",
     "@plugola/message-bus": "^9.0.2",
     "@plugola/plugin-manager": "^9.1.0",
     "@types/node": "26.6.6",
     "@vitest/runner": "4.1.11",
+    "jest": "30.5.2",
     "rimraf": "6.1.4",
     "typescript": "7.0.2",
     "vitest": "5.1.0"
@@ -34,6 +39,21 @@
   },
   "peerDependencies": {
     "@plugola/plugin-manager": "^9.1.0",
-    "vitest": ">=3.2.4"
+    "vitest": ">=3.2.4",
+    "@jest/globals": ">=29.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    },
+    "@jest/globals": {
+      "optional": true
+    }
+  },
+  "jest": {
+    "testMatch": [
+      "<rootDir>/test/jest-runner.mjs"
+    ],
+    "transform": {}
   }
 }
