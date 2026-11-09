@@ -24,6 +24,11 @@ export interface TestRunner {
 /**
  * Declares a `describe` per entry in `tests`, each enabling then running the
  * plugin under test alongside that entry's plugins.
+ *
+ * The plugin manager isolates an error thrown from a plugin's hook, so one
+ * plugin can't take down the others. Here, such an error (e.g. a failed
+ * `expect`) fails the step it was thrown in: `init` for `enable`, `run` for
+ * `run`.
  */
 export interface TestPluginFn {
   <
@@ -64,10 +69,15 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
         let testContext: Record<string, unknown>
         let pluginManager: AnyPluginManager
         let pluginNames: string[]
+        const errors: PluginErrors = { enable: [], run: [] }
 
         beforeAll(() => {
           testContext = testPlugin.testContext?.() ?? {}
-          pluginManager = createPluginManager(testPlugin, () => testContext)
+          pluginManager = createPluginManager(
+            testPlugin,
+            () => testContext,
+            (error, _, phase) => errors[phase].push(error),
+          )
 
           const { plugin } = testPlugin
           if (typeof plugin !== 'string') pluginManager.registerPlugin(plugin)
@@ -87,6 +97,7 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
           const p = pluginManager.enablePlugins(pluginNames)
           if (testPlugin.afterInit) await testPlugin.afterInit(testContext, p)
           else await p
+          throwAll(errors.enable)
         })
 
         test('run', async () => {
@@ -96,6 +107,7 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
           })
           if (testPlugin.afterRun) await testPlugin.afterRun(testContext, p)
           else await p
+          throwAll(errors.run)
         })
       })
     }
@@ -106,6 +118,7 @@ function createPluginManager(
   testPlugin:
     TestPlugin<any, any, any, any> | TestHostPlugin<AnyPluginManager, any, any>,
   getTestContext: () => Record<string, unknown>,
+  onPluginError: OnPluginError,
 ): AnyPluginManager {
   const addContext = (pluginName: string) => ({
     ...getTestContext(),
@@ -116,17 +129,21 @@ function createPluginManager(
     return testPlugin.pluginManager.withOptions({ addContext, onPluginError })
 
   return new PluginManager({
-    onPluginError,
     addContext,
     addEnableContext: testPlugin.enableContext,
     addRunContext: testPlugin.runContext,
+    onPluginError,
   })
 }
 
-/**
- * The plugin manager isolates and logs plugin errors by default, which would
- * swallow a failed assertion; rethrow so `init` / `run` fail instead.
- */
-function onPluginError(error: unknown): never {
-  throw error
+function throwAll(errors: unknown[]) {
+  if (errors.length === 1) throw errors[0]
+  if (errors.length > 1)
+    throw new AggregateError(errors, `${errors.length} plugins failed`)
 }
+
+type OnPluginError = NonNullable<
+  ConstructorParameters<typeof PluginManager>[0]
+>['onPluginError']
+
+type PluginErrors = Record<'enable' | 'run', unknown[]>

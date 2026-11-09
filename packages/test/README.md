@@ -94,6 +94,15 @@ testPlugin({
 })
 ```
 
+## Failing tests
+
+The plugin manager isolates an error thrown from a plugin's hook so that one
+plugin can't take down the others. `testPlugin` collects those errors instead:
+one thrown from any plugin's `enable` (the plugin under test's or a test
+plugin's) fails that entry's `init` test, and one from `run` fails its `run`
+test. So assertions can live in the test plugins' hooks. When several plugins
+fail, the test fails with an `AggregateError` of them all.
+
 ## Hooks
 
 | Hook                               | Called with                                                          |
