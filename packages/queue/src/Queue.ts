@@ -14,9 +14,9 @@ export class Queue<T> implements Runnable {
     return this.#running
   }
 
-  push(item: T) {
-    if (this.#running) this.#exec(item)
-    else this.items.push(item)
+  push(...items: T[]) {
+    if (this.#running) items.forEach((item) => this.#exec(item))
+    else this.items.push(...items)
   }
 
   resume() {
