@@ -1,6 +1,6 @@
 {
   "name": "@plugola/store",
-  "version": "9.0.2",
+  "version": "9.0.3",
   "description": "State management",
   "type": "module",
   "exports": {
@@ -30,7 +30,7 @@
     "vitest": "5.1.0"
   },
   "dependencies": {
-    "@plugola/queue": "^1.0.1",
+    "@plugola/queue": "^1.1.0",
     "tslib": "^2.9.1"
   }
 }

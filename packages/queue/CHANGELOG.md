@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/jg-wright/plugola/compare/queue-v1.0.1...queue-v1.1.0) (2026-11-12)
+
+
+### Features
+
+* **queue:** align queue with array.push ([34bf41b](https://github.com/jg-wright/plugola/commit/34bf41b31480f5fb327a8c528f874e03c2b2609c))
+
+
+### Bug Fixes
+
+* **queue:** drain falsy items on resume ([7adf84d](https://github.com/jg-wright/plugola/commit/7adf84d99e29f9d258b2f812986f5cc63cbd290a))
+
 ## [1.0.1](https://github.com/jg-wright/plugola/compare/queue-v1.0.0...queue-v1.0.1) (2026-11-05)
 
 
