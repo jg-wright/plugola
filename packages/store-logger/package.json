@@ -1,6 +1,6 @@
 {
   "name": "@plugola/store-logger",
-  "version": "3.0.6",
+  "version": "3.0.7",
   "description": "Logger/debugger for the store",
   "type": "module",
   "exports": {
@@ -22,7 +22,7 @@
   "homepage": "https://github.com/jg-wright/plugola#readme",
   "devDependencies": {
     "@plugola/logger": "5.0.4",
-    "@plugola/store": "9.0.2",
+    "@plugola/store": "9.0.3",
     "@types/node": "26.6.6",
     "@vitest/runner": "4.1.11",
     "rimraf": "6.1.4",
@@ -34,6 +34,6 @@
   },
   "peerDependencies": {
     "@plugola/logger": "^5.0.4",
-    "@plugola/store": "^9.0.2"
+    "@plugola/store": "^9.0.3"
   }
 }
