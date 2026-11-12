@@ -22,8 +22,8 @@ export class Queue<T> implements Runnable {
   resume() {
     if (this.#running) return
     this.#running = true
-    let item: T | undefined
-    while (this.#running && (item = this.items.shift())) this.push(item)
+    while (this.#running && this.items.length > 0)
+      this.push(this.items.shift()!)
   }
 
   pause() {

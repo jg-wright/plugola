@@ -35,6 +35,14 @@ test('Queue buffers while paused and drains in FIFO order on resume', () => {
   expect(seen).toEqual([1, 2, 3])
 })
 
+test('Queue drains falsy items on resume', () => {
+  const seen: unknown[] = []
+  const queue = new Queue<unknown>((item) => seen.push(item))
+  queue.push(0, '', false, null, undefined, 1)
+  queue.resume()
+  expect(seen).toEqual([0, '', false, null, undefined, 1])
+})
+
 test('Queue executes immediately once running', () => {
   const seen: number[] = []
   const queue = new Queue<number>((n) => seen.push(n))
