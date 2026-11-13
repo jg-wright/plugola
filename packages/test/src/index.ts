@@ -2,11 +2,24 @@ import { PluginManager } from '@plugola/plugin-manager'
 import type {
   AnyPluginManager,
   HostPlugin,
+  HostPluginOf,
+  TestEntry,
   TestHostPlugin,
+  TestHostPluginOf,
+  TestOptions,
   TestPlugin,
 } from './TestPlugin.js'
 
-export type { AnyPluginManager, HostPlugin, TestHostPlugin, TestPlugin }
+export type {
+  AnyPluginManager,
+  HostPlugin,
+  HostPluginOf,
+  TestEntry,
+  TestHostPlugin,
+  TestHostPluginOf,
+  TestOptions,
+  TestPlugin,
+}
 
 /**
  * The parts of a test runner that `testPlugin` needs. vitest, Jest and
@@ -46,11 +59,21 @@ export interface TestPluginFn {
     >,
   ): void
   <
-    PM extends AnyPluginManager,
+    Context extends Record<string, unknown>,
+    ExtraEnableContext extends Record<string, unknown>,
+    ExtraRunContext extends Record<string, unknown>,
+    PluginMeta extends object,
     TestContext extends Record<string, unknown>,
     PluginContext extends Record<string, unknown>,
   >(
-    testPlugin: TestHostPlugin<PM, TestContext, PluginContext>,
+    testPlugin: TestHostPluginOf<
+      Context,
+      ExtraEnableContext,
+      ExtraRunContext,
+      PluginMeta,
+      TestContext,
+      PluginContext
+    >,
   ): void
 }
 
@@ -63,8 +86,8 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
       | TestPlugin<any, any, any, any>
       | TestHostPlugin<AnyPluginManager, any, any>,
   ) {
-    for (const [testName, $plugins] of Object.entries(testPlugin.tests)) {
-      const plugins = Array.isArray($plugins) ? $plugins : [$plugins]
+    for (const [testName, entry] of Object.entries(testPlugin.tests)) {
+      const { plugins, pluginContext } = parseTestEntry(entry)
 
       describe(testName, () => {
         let testContext: Record<string, unknown>
@@ -76,7 +99,14 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
           testContext = testPlugin.testContext?.() ?? {}
           pluginManager = createPluginManager(
             testPlugin,
-            () => testContext,
+            (pluginName, hostContext) => {
+              const context = { ...hostContext, ...testContext }
+              return {
+                ...testContext,
+                ...testPlugin.pluginContext?.(pluginName, context),
+                ...pluginContext?.(pluginName, context),
+              }
+            },
             (error, _, phase) => errors[phase].push(error),
           )
 
@@ -96,7 +126,7 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
           pluginManager.disableAllPlugins()
         })
 
-        test('init', async () => {
+        test('enable', async () => {
           const p = pluginManager.enablePlugins(pluginNames)
           if (testPlugin.afterInit) await testPlugin.afterInit(testContext, p)
           else await p
@@ -120,23 +150,32 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
 function createPluginManager(
   testPlugin:
     TestPlugin<any, any, any, any> | TestHostPlugin<AnyPluginManager, any, any>,
-  getTestContext: () => Record<string, unknown>,
+  addContext: AddContext,
   onPluginError: OnPluginError,
 ): AnyPluginManager {
-  const addContext = (pluginName: string) => ({
-    ...getTestContext(),
-    ...testPlugin.pluginContext?.(pluginName, getTestContext()),
-  })
-
-  if ('pluginManager' in testPlugin)
-    return testPlugin.pluginManager.withOptions({ addContext, onPluginError })
+  if (testPlugin.pluginManager)
+    return testPlugin.pluginManager.withOptions({
+      addContext: (pluginName, _, hostContext) =>
+        addContext(pluginName, hostContext),
+      onPluginError,
+    })
 
   return new PluginManager({
-    addContext,
+    addContext: (pluginName) => addContext(pluginName, {}),
     addEnableContext: testPlugin.enableContext,
     addRunContext: testPlugin.runContext,
     onPluginError,
   })
+}
+
+/** Splits a test's plugins from the options it sets for itself. */
+function parseTestEntry(entry: TestEntry<AnyTestPlugin, any, any>): {
+  plugins: AnyTestPlugin[]
+  pluginContext?: TestOptions<any, any>['pluginContext']
+} {
+  if (Array.isArray(entry)) return { plugins: entry }
+  const { pluginContext, ...plugin } = entry
+  return { plugins: [plugin], pluginContext }
 }
 
 function throwAll(errors: unknown[]) {
@@ -148,5 +187,13 @@ function throwAll(errors: unknown[]) {
 type OnPluginError = NonNullable<
   ConstructorParameters<typeof PluginManager>[0]
 >['onPluginError']
+
+/** Builds a plugin's context over the host's, which is empty without a host. */
+type AddContext = (
+  pluginName: string,
+  hostContext: Record<string, unknown>,
+) => Record<string, unknown>
+
+type AnyTestPlugin = { name?: string } & Record<string, unknown>
 
 type PluginErrors = Record<'enable' | 'run', unknown[]>
