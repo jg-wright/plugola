@@ -707,6 +707,40 @@ test('replacing context', async () => {
   expect(run.mock.calls[0][0].foo).toBe('rab')
 })
 
+test('withOptions passes each add*Context what the original returned', async () => {
+  const run = vi.fn()
+  const created = { context: 0, enable: 0, run: 0 }
+
+  const pluginManager = new PluginManager({
+    addContext: (pluginName) => ({
+      seen: [`context ${++created.context} for ${pluginName}`],
+    }),
+    addEnableContext: () => ({ enableSeen: [`enable ${++created.enable}`] }),
+    addRunContext: () => ({ runSeen: [`run ${++created.run}`] }),
+  })
+
+  pluginManager.registerPlugin('p', { enable() {}, run })
+
+  const sibling = pluginManager.withOptions({
+    addContext: (_, __, { seen }) => ({ seen: [...seen, 'sibling'] }),
+    addEnableContext: (_, __, { enableSeen }) => ({
+      enableSeen: [...enableSeen, 'sibling'],
+    }),
+    addRunContext: (_, __, { runSeen }) => ({
+      runSeen: [...runSeen, 'sibling'],
+    }),
+  })
+
+  await sibling.enablePlugins(['p'])
+  await sibling.run()
+
+  expect(run.mock.calls[0][0]).toMatchObject({
+    seen: ['context 2 for p', 'sibling'],
+    runSeen: ['run 1', 'sibling'],
+  })
+  expect(created).toEqual({ context: 2, enable: 1, run: 1 })
+})
+
 function createLatch() {
   let release!: () => void
   const promise = new Promise<void>((resolve) => (release = resolve))

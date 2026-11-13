@@ -303,6 +303,18 @@ await testManager.enableAllPlugins()
 await testManager.run()
 ```
 
+Each `add*Context` passed to `withOptions` is also given what the original
+manager's matching callback returned for the same plugin, so it can build on
+it rather than make its own:
+
+```typescript
+const testManager = pluginManager.withOptions({
+  addContext: (_pluginName, _options, { log }) => ({
+    log: log.child({ test: true }),
+  }),
+})
+```
+
 ## API overview
 
 ### Class diagram

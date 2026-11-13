@@ -79,6 +79,55 @@ export interface PluginManagerOptions<
 }
 
 /**
+ * Options for {@link PluginManager.withOptions}: the same as
+ * {@link PluginManagerOptions}, except each `add*Context` callback is also
+ * passed what the original manager's matching callback returned for the same
+ * plugin, so it can build on it.
+ */
+export interface SiblingOptions<
+  ExtraContext extends Record<string, unknown>,
+  ExtraEnableContext extends Record<string, unknown>,
+  ExtraRunContext extends Record<string, unknown>,
+  PluginMeta extends object = {},
+> extends Omit<
+  PluginManagerOptions<
+    ExtraContext,
+    ExtraEnableContext,
+    ExtraRunContext,
+    PluginMeta
+  >,
+  'addContext' | 'addEnableContext' | 'addRunContext'
+> {
+  /**
+   * As {@link PluginManagerOptions.addContext}, also passed what the original
+   * manager's `addContext` returned for this plugin.
+   */
+  addContext?(
+    pluginName: string,
+    options: ContextOptions,
+    context: ExtraContext,
+  ): ExtraContext
+  /**
+   * As {@link PluginManagerOptions.addEnableContext}, also passed what the
+   * original manager's `addEnableContext` returned for this plugin.
+   */
+  addEnableContext?(
+    pluginName: string,
+    options: ContextOptions,
+    context: ExtraEnableContext,
+  ): ExtraEnableContext
+  /**
+   * As {@link PluginManagerOptions.addRunContext}, also passed what the
+   * original manager's `addRunContext` returned for this plugin.
+   */
+  addRunContext?(
+    pluginName: string,
+    options: ContextOptions,
+    context: ExtraRunContext,
+  ): ExtraRunContext
+}
+
+/**
  * Options for a single {@link PluginManager.run} call.
  */
 export interface RunOptions {
@@ -232,8 +281,9 @@ export default class PluginManager<
    *
    * @remarks
    * The extra-context callbacks are layered: for each plugin the returned
-   * manager first calls this manager's `add*Context`, then the ones passed here,
-   * so overlapping keys from `options` win.
+   * manager first calls this manager's `add*Context`, then the ones passed here
+   * — with what this manager's returned, so they can build on it. Overlapping
+   * keys from `options` win.
    *
    * The returned manager reuses the registered plugins and the dependency graph
    * but has its own independent runtime state (enabled/ran plugins and abort
@@ -244,7 +294,7 @@ export default class PluginManager<
    * @returns A new {@link PluginManager} sharing this one's plugins.
    */
   withOptions(
-    options: PluginManagerOptions<
+    options: SiblingOptions<
       ExtraContext,
       ExtraEnableContext,
       ExtraRunContext,
@@ -260,20 +310,26 @@ export default class PluginManager<
       ...options,
       gates: [...this.#gates, ...(options.gates ?? [])],
       addContext: (pluginName, contextOptions) =>
-        ({
-          ...this.#options.addContext?.(pluginName, contextOptions),
-          ...options.addContext?.(pluginName, contextOptions),
-        }) as ExtraContext,
+        layerContext(
+          this.#options.addContext,
+          options.addContext,
+          pluginName,
+          contextOptions,
+        ),
       addEnableContext: (pluginName, contextOptions) =>
-        ({
-          ...this.#options.addEnableContext?.(pluginName, contextOptions),
-          ...options.addEnableContext?.(pluginName, contextOptions),
-        }) as ExtraEnableContext,
+        layerContext(
+          this.#options.addEnableContext,
+          options.addEnableContext,
+          pluginName,
+          contextOptions,
+        ),
       addRunContext: (pluginName, contextOptions) =>
-        ({
-          ...this.#options.addRunContext?.(pluginName, contextOptions),
-          ...options.addRunContext?.(pluginName, contextOptions),
-        }) as ExtraRunContext,
+        layerContext(
+          this.#options.addRunContext,
+          options.addRunContext,
+          pluginName,
+          contextOptions,
+        ),
     })
     pluginManager.#plugins = this.#plugins
     pluginManager.#dependencyGraph = this.#dependencyGraph
@@ -842,6 +898,22 @@ export default class PluginManager<
       ...(this.#options.addContext?.(name, { signal }) || {}),
     }
   }
+}
+
+/**
+ * Calls `base` then `over` — passing it what `base` returned — and merges the
+ * two, `over` winning.
+ */
+function layerContext<C extends Record<string, unknown>>(
+  base: ((pluginName: string, options: ContextOptions) => C) | undefined,
+  over:
+    | ((pluginName: string, options: ContextOptions, context: C) => C)
+    | undefined,
+  pluginName: string,
+  options: ContextOptions,
+): C {
+  const context = (base?.(pluginName, options) ?? {}) as C
+  return { ...context, ...over?.(pluginName, options, context) }
 }
 
 type ManagedPlugin<PluginMeta extends object> = Plugin<any, any> & PluginMeta

@@ -2,6 +2,7 @@ export {
   default as PluginManager,
   PluginManagerOptions,
   RunOptions,
+  SiblingOptions,
 } from './PluginManager.js'
 export { RunContext, EnableContext, ContextOptions } from './Context.js'
 export { Gate, GatePhase } from './Gate.js'
