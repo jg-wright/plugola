@@ -99,6 +99,50 @@ testPlugin({
 })
 ```
 
+Here `pluginContext` is passed the host's context for that plugin, with
+`testContext` layered over it, so it can build on what the host provides:
+
+```typescript
+testPlugin({
+  pluginManager,
+  plugin: 'greeter',
+  testContext: () => ({ level: 'silent' }),
+  pluginContext: (pluginName, { log, level }) => ({
+    log: log.child({ pluginName, level }),
+  }),
+
+  tests: {
+    // ...
+  },
+})
+```
+
+## Setting up a single test
+
+A test with a single plugin can set its own `pluginContext`. It's layered over
+the top-level `pluginContext` for every plugin in that test, including the
+plugin under test, so a test can change just the parts it cares about. It's
+passed the same context as the top-level `pluginContext`:
+
+```typescript
+testPlugin({
+  pluginManager,
+  plugin: 'greeter',
+  pluginContext: () => ({ delay: 0, log: silentLog }),
+
+  tests: {
+    'greets promptly': {
+      run() {},
+    },
+
+    'greets slowly': {
+      pluginContext: () => ({ delay: 1000 }),
+      run() {},
+    },
+  },
+})
+```
+
 ## Failing tests
 
 The plugin manager isolates an error thrown from a plugin's hook so that one
