@@ -126,7 +126,7 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
           pluginManager.disableAllPlugins()
         })
 
-        test('init', async () => {
+        test('enable', async () => {
           const p = pluginManager.enablePlugins(pluginNames)
           if (testPlugin.afterInit) await testPlugin.afterInit(testContext, p)
           else await p
