@@ -6,21 +6,21 @@ test("a plugin's error fails the step it was thrown in", async () => {
   const results = await runFixture('plugin-errors.fixture.ts')
 
   expect(results).toEqual({
-    'an assertion fails in a run hook > init': ['passed'],
+    'an assertion fails in a run hook > enable': ['passed'],
     'an assertion fails in a run hook > run': [
       'failed',
       "expected 'actual' to be 'expected' // Object.is equality",
     ],
-    'a test plugin throws from enable > init': ['failed', 'enable failed'],
+    'a test plugin throws from enable > enable': ['failed', 'enable failed'],
     'a test plugin throws from enable > run': ['passed'],
-    'every plugin behaves > init': ['passed'],
+    'every plugin behaves > enable': ['passed'],
     'every plugin behaves > run': ['passed'],
-    'the plugin under test throws from run > init': ['passed'],
+    'the plugin under test throws from run > enable': ['passed'],
     'the plugin under test throws from run > run': [
       'failed',
       'the plugin under test failed',
     ],
-    'an assertion fails in a run hook on a host manager > init': ['passed'],
+    'an assertion fails in a run hook on a host manager > enable': ['passed'],
     'an assertion fails in a run hook on a host manager > run': [
       'failed',
       "expected 'actual' to be 'expected' // Object.is equality",
