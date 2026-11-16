@@ -1,5 +1,29 @@
 # Changelog
 
+## [4.1.0](https://github.com/jg-wright/plugola/compare/test-v4.0.0...test-v4.1.0) (2026-11-16)
+
+
+### Features
+
+* **test:** add afterEnable, deprecating afterInit ([ee445e1](https://github.com/jg-wright/plugola/commit/ee445e1e9ab1a9fac52fb89ffd21fe488d0650cd))
+* **test:** set up pluginContext per test and from the host's context ([37e63e0](https://github.com/jg-wright/plugola/commit/37e63e0330a269c084d4ada8aa59471bc86dc242))
+
+
+### Bug Fixes
+
+* correct test name ([f050b3b](https://github.com/jg-wright/plugola/commit/f050b3b06070ee98e580f03abfd7e82c5ae1b888))
+* **test:** update tests and docs for the renamed enable step ([d19e7b3](https://github.com/jg-wright/plugola/commit/d19e7b31d08879bdc28f947755be627a190d3a8a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/message-bus bumped from ^9.0.3 to ^9.0.4
+    * @plugola/plugin-manager bumped from ^9.2.0 to ^9.3.0
+  * peerDependencies
+    * @plugola/plugin-manager bumped from ^9.2.0 to ^9.3.0
+
 ## [4.0.0](https://github.com/jg-wright/plugola/compare/test-v3.1.2...test-v4.0.0) (2026-11-09)
 
 
