@@ -26,8 +26,8 @@ testPlugin({
     },
   },
 
-  async afterInit({ messageBus }, initiating) {
-    await messageBus.resumeUntil(initiating)
+  async afterEnable({ messageBus }, enabling) {
+    await messageBus.resumeUntil(enabling)
   },
 
   async afterRun({ messageBus }) {
@@ -89,6 +89,47 @@ testPlugin({
       pluginContext: (pluginName) => ({ speed: `slow for ${pluginName}` }),
       run({ seen }) {
         expect(seen.speed).toBe('slow for The plugin')
+      },
+    },
+  },
+})
+
+testPlugin({
+  testContext: () => ({ called: [] as string[] }),
+  plugin: { name: 'The plugin' },
+
+  afterInit({ called }, enabling) {
+    called.push('afterInit')
+    return enabling
+  },
+
+  tests: {
+    'afterInit is a deprecated alias of afterEnable': {
+      run({ called }) {
+        expect(called).toEqual(['afterInit'])
+      },
+    },
+  },
+})
+
+testPlugin({
+  testContext: () => ({ called: [] as string[] }),
+  plugin: { name: 'The plugin' },
+
+  afterEnable({ called }, enabling) {
+    called.push('afterEnable')
+    return enabling
+  },
+
+  afterInit({ called }, enabling) {
+    called.push('afterInit')
+    return enabling
+  },
+
+  tests: {
+    'afterInit is ignored when afterEnable is set': {
+      run({ called }) {
+        expect(called).toEqual(['afterEnable'])
       },
     },
   },

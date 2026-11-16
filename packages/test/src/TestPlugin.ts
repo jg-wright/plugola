@@ -131,7 +131,13 @@ export interface TestHostPluginOf<
 }
 
 interface Hooks<TestContext> {
-  afterInit?(testContext: TestContext, initiating: Promise<void>): any
+  /** Called with the promise of enabling the plugins. */
+  afterEnable?(testContext: TestContext, enabling: Promise<void>): any
+  /**
+   * @deprecated Renamed {@link afterEnable}, after the step it runs in. Ignored
+   * when `afterEnable` is set.
+   */
+  afterInit?(testContext: TestContext, enabling: Promise<void>): any
   afterRun?(testContext: TestContext, running: Promise<void>): any
   /** Passed to `run({ onStarted })`, e.g. to resume a paused message bus. */
   onStarted?(testContext: TestContext): void

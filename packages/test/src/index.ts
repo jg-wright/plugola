@@ -127,7 +127,8 @@ export function createTestPlugin(runner: TestRunner): TestPluginFn {
 
         test('enable', async () => {
           const p = pluginManager.enablePlugins(pluginNames)
-          if (testPlugin.afterInit) await testPlugin.afterInit(testContext, p)
+          const afterEnable = testPlugin.afterEnable ?? testPlugin.afterInit
+          if (afterEnable) await afterEnable(testContext, p)
           else await p
           throwAll(errors.enable)
         })
