@@ -3,7 +3,7 @@
 > Test plugola plugins
 
 `testPlugin` declares a `describe` per entry in `tests`. Each one enables the
-plugin under test alongside that entry's plugins (`init`), then runs them
+plugin under test alongside that entry's plugins (`enable`), then runs them
 (`run`), so the entry's plugins can drive and assert on the plugin under test.
 
 ## Choosing a test runner
@@ -148,7 +148,7 @@ testPlugin({
 The plugin manager isolates an error thrown from a plugin's hook so that one
 plugin can't take down the others. `testPlugin` collects those errors instead:
 one thrown from any plugin's `enable` (the plugin under test's or a test
-plugin's) fails that entry's `init` test, and one from `run` fails its `run`
+plugin's) fails that entry's `enable` test, and one from `run` fails its `run`
 test. So assertions can live in the test plugins' hooks. When several plugins
 fail, the test fails with an `AggregateError` of them all.
 

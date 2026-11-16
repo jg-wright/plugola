@@ -41,8 +41,7 @@ export interface TestRunner {
  *
  * The plugin manager isolates an error thrown from a plugin's hook, so one
  * plugin can't take down the others. Here, such an error (e.g. a failed
- * `expect`) fails the step it was thrown in: `init` for `enable`, `run` for
- * `run`.
+ * `expect`) fails the step it was thrown in: `enable` or `run`.
  */
 export interface TestPluginFn {
   <
