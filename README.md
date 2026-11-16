@@ -1,6 +1,10 @@
-# Plugola
-
-**plugins**. Use them together or on their own.
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/plugola-logo-text.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/plugola-logo-text-light.png">
+    <img alt="Plugola" src="assets/plugola-logo-text-light.png" width="480">
+  </picture>
+</h1>
 
 The core idea: your app is a set of independent plugins. A **plugin manager**
 decides which plugins are active and runs them in dependency order. The plugins
