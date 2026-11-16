@@ -154,8 +154,11 @@ fail, the test fails with an `AggregateError` of them all.
 
 ## Hooks
 
-| Hook                               | Called with                                                          |
-| ---------------------------------- | -------------------------------------------------------------------- |
-| `afterInit(testContext, enabling)` | the promise of enabling the plugins                                  |
-| `afterRun(testContext, running)`   | the promise of running them                                          |
-| `onStarted(testContext)`           | once every run hook has been invoked; passed to `run({ onStarted })` |
+| Hook                                 | Called with                                                          |
+| ------------------------------------ | -------------------------------------------------------------------- |
+| `afterEnable(testContext, enabling)` | the promise of enabling the plugins                                  |
+| `afterRun(testContext, running)`     | the promise of running them                                          |
+| `onStarted(testContext)`             | once every run hook has been invoked; passed to `run({ onStarted })` |
+
+`afterInit` is a deprecated alias of `afterEnable`, ignored when `afterEnable`
+is set.
