@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.2](https://github.com/jg-wright/plugola/compare/vendor-plugin-manager-v5.0.1...vendor-plugin-manager-v5.0.2) (2026-11-16)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/plugin-manager bumped from 9.2.0 to 9.3.0
+  * peerDependencies
+    * @plugola/plugin-manager bumped from ^9.2.0 to ^9.3.0
+
 ## [5.0.1](https://github.com/jg-wright/plugola/compare/vendor-plugin-manager-v5.0.0...vendor-plugin-manager-v5.0.1) (2026-11-09)
 
 

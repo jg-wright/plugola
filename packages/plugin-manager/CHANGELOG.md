@@ -1,5 +1,12 @@
 # Changelog
 
+## [9.3.0](https://github.com/jg-wright/plugola/compare/plugin-manager-v9.2.0...plugin-manager-v9.3.0) (2026-11-16)
+
+
+### Features
+
+* **plugin-manager:** pass the original context to withOptions callbacks ([c9ad452](https://github.com/jg-wright/plugola/commit/c9ad452c480abef7cabb77e90043109d21c4dee1))
+
 ## [9.2.0](https://github.com/jg-wright/plugola/compare/plugin-manager-v9.1.0...plugin-manager-v9.2.0) (2026-11-09)
 
 
