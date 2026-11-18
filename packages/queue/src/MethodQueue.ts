@@ -1,6 +1,6 @@
 import { Queue } from './Queue.ts'
 
-export class MethodQueue extends Queue<() => any> {
+export class MethodQueue extends Queue<() => any, any> {
   constructor() {
     super((fn) => fn())
   }
