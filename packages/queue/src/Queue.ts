@@ -1,10 +1,10 @@
 import type { Runnable } from './Runnable.ts'
 
-export class Queue<T> implements Runnable {
-  #exec: (item: T) => void
+export class Queue<T, R = void> implements Runnable {
+  #exec: (item: T) => R
   protected readonly items: T[]
 
-  constructor(exec: (item: T) => void, items: T[] = []) {
+  constructor(exec: (item: T) => R, items: T[] = []) {
     this.#exec = exec
     this.items = items
   }
@@ -15,18 +15,21 @@ export class Queue<T> implements Runnable {
   }
 
   push(...items: T[]) {
-    if (this.#running) items.forEach((item) => this.#exec(item))
-    else this.items.push(...items)
+    this.execItems(this.#exec, items)
+    if (items.length) this.items.push(...items)
   }
 
   resume() {
     if (this.#running) return
     this.#running = true
-    while (this.#running && this.items.length > 0)
-      this.push(this.items.shift()!)
+    this.execItems(this.#exec, this.items)
   }
 
   pause() {
     this.#running = false
+  }
+
+  protected execItems(exec: (item: T) => R, items: T[]) {
+    while (this.#running && items.length > 0) exec(items.shift()!)
   }
 }
