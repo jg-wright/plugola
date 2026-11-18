@@ -1,5 +1,14 @@
 # Changelog
 
+## [9.0.5](https://github.com/jg-wright/plugola/compare/message-bus-v9.0.4...message-bus-v9.0.5) (2026-11-18)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @plugola/queue bumped from ^1.1.0 to ^1.2.0
+
 ## [9.0.4](https://github.com/jg-wright/plugola/compare/message-bus-v9.0.3...message-bus-v9.0.4) (2026-11-16)
 
 

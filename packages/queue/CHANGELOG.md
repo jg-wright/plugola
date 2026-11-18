@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/jg-wright/plugola/compare/queue-v1.1.0...queue-v1.2.0) (2026-11-18)
+
+
+### Features
+
+* **queue:** add Asyncable mixin for ordered async execution ([fe641bb](https://github.com/jg-wright/plugola/commit/fe641bb69a85764850d4bf345b69b818537df35c))
+
 ## [1.1.0](https://github.com/jg-wright/plugola/compare/queue-v1.0.1...queue-v1.1.0) (2026-11-16)
 
 
