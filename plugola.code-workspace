@@ -54,8 +54,9 @@
     },
   ],
   "settings": {
-    "search.exclude": { "**/dist": true },
     "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+    "robotcode.disableExtension": true,
+    "search.exclude": { "**/dist": true },
   },
   "extensions": {
     "recommendations": ["esbenp.prettier-vscode"],
