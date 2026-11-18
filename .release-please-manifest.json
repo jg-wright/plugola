@@ -2,6 +2,7 @@
   "packages/graph": "3.0.3",
   "packages/logger": "5.0.4",
   "packages/message-bus": "9.0.4",
+  "packages/message-bus-kafka": "0.0.0",
   "packages/plugin-manager": "9.3.0",
   "packages/query-params": "4.0.1",
   "packages/queue": "1.1.0",

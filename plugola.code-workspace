@@ -17,6 +17,10 @@
       "path": "packages/message-bus",
     },
     {
+      "name": "📦 @plugola/message-bus-kafka",
+      "path": "packages/message-bus-kafka",
+    },
+    {
       "name": "📦 @plugola/plugin-manager",
       "path": "packages/plugin-manager",
     },
@@ -50,8 +54,9 @@
     },
   ],
   "settings": {
-    "search.exclude": { "**/dist": true },
     "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+    "robotcode.disableExtension": true,
+    "search.exclude": { "**/dist": true },
   },
   "extensions": {
     "recommendations": ["esbenp.prettier-vscode"],
