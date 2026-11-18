@@ -1,0 +1,46 @@
+{
+  "name": "@plugola/message-bus-kafka",
+  "version": "0.0.0",
+  "description": "A Kafka Channel for @plugola/message-bus bridges",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean && rimraf dist",
+    "start": "tsc --watch --preserveWatchOutput",
+    "test": "vitest --run && npm run test:types",
+    "test:types": "tsc -p test/tsconfig.json"
+  },
+  "keywords": [
+    "kafka",
+    "message-bus",
+    "plugola"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jg-wright/plugola/issues"
+  },
+  "repository": {
+    "url": "https://github.com/jg-wright/plugola"
+  },
+  "homepage": "https://github.com/jg-wright/plugola#readme",
+  "peerDependencies": {
+    "@plugola/message-bus": "^9.0.4"
+  },
+  "devDependencies": {
+    "@plugola/message-bus": "^9.0.4",
+    "@types/node": "26.6.6",
+    "@vitest/runner": "4.1.11",
+    "kafkajs": "2.2.4",
+    "rimraf": "6.1.4",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "tslib": "^2.9.1"
+  }
+}

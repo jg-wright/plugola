@@ -15,6 +15,18 @@ jobs:
       matrix:
         node-version: [24, 26]
 
+    # A single-node KRaft broker for @plugola/message-bus-kafka's end-to-end test.
+    services:
+      kafka:
+        image: apache/kafka:4.2.0
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -24,3 +36,5 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+        env:
+          KAFKA_BROKERS: localhost:9092

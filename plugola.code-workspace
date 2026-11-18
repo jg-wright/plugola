@@ -17,6 +17,10 @@
       "path": "packages/message-bus",
     },
     {
+      "name": "📦 @plugola/message-bus-kafka",
+      "path": "packages/message-bus-kafka",
+    },
+    {
       "name": "📦 @plugola/plugin-manager",
       "path": "packages/plugin-manager",
     },

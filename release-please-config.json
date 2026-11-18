@@ -6,6 +6,7 @@
     "packages/graph": {},
     "packages/logger": {},
     "packages/message-bus": {},
+    "packages/message-bus-kafka": {},
     "packages/plugin-manager": {},
     "packages/query-params": {},
     "packages/queue": {},
