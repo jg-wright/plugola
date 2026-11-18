@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.1.1](https://github.com/jg-wright/plugola/compare/test-v4.1.0...test-v4.1.1) (2026-11-18)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @plugola/message-bus bumped from ^9.0.4 to ^9.0.5
+
 ## [4.1.0](https://github.com/jg-wright/plugola/compare/test-v4.0.0...test-v4.1.0) (2026-11-16)
 
 

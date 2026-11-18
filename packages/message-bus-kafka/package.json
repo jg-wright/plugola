@@ -1,6 +1,6 @@
 {
   "name": "@plugola/message-bus-kafka",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "A Kafka Channel for @plugola/message-bus bridges",
   "type": "module",
   "exports": {
@@ -29,10 +29,10 @@
   },
   "homepage": "https://github.com/jg-wright/plugola#readme",
   "peerDependencies": {
-    "@plugola/message-bus": "^9.0.4"
+    "@plugola/message-bus": "^9.0.5"
   },
   "devDependencies": {
-    "@plugola/message-bus": "^9.0.4",
+    "@plugola/message-bus": "^9.0.5",
     "@types/node": "26.6.6",
     "@vitest/runner": "4.1.11",
     "kafkajs": "2.2.4",
