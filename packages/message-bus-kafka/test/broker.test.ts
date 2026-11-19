@@ -53,6 +53,7 @@ test.skipIf(!brokers)(
  * them; disposing disconnects every client and deletes the topics.
  */
 async function useTopicPair(brokers: string[]) {
+  const disposable = new AsyncDisposableStack()
   const kafka = new Kafka({
     brokers,
     clientId: 'message-bus-kafka-test',
@@ -60,14 +61,18 @@ async function useTopicPair(brokers: string[]) {
   })
   const id = crypto.randomUUID()
   const topics = [`mbk-${id}-a`, `mbk-${id}-b`] as const
+
   const admin = kafka.admin()
   await admin.connect()
   await admin.createTopics({
     waitForLeaders: true,
     topics: topics.map((topic) => ({ topic, numPartitions: 1 })),
   })
+  disposable.defer(async () => {
+    await admin.deleteTopics({ topics: [...topics] })
+    await admin.disconnect()
+  })
 
-  const disconnects: (() => Promise<void>)[] = []
   const errors: unknown[] = []
 
   return {
@@ -82,22 +87,26 @@ async function useTopicPair(brokers: string[]) {
       const producer = kafka.producer({
         createPartitioner: Partitioners.DefaultPartitioner,
       })
-      const consumer = kafka.consumer({ groupId: `mbk-${id}-${name}` })
-      await Promise.all([producer.connect(), consumer.connect()])
 
-      const channel = new KafkaChannel({
-        producer,
-        consumer,
-        topics: channelTopics,
-        // The topics are new, so read them from the start: frames produced
-        // before this consumer joins its group are not missed.
-        fromBeginning: true,
-        onError: (error) => errors.push(error),
-      })
-      disconnects.push(async () => {
-        await channel.flush()
+      const consumer = kafka.consumer({ groupId: `mbk-${id}-${name}` })
+
+      await Promise.all([producer.connect(), consumer.connect()])
+      disposable.defer(async () => {
         await Promise.all([producer.disconnect(), consumer.disconnect()])
       })
+
+      const channel = disposable.adopt(
+        new KafkaChannel({
+          producer,
+          consumer,
+          topics: channelTopics,
+          // The topics are new, so read them from the start: frames produced
+          // before this consumer joins its group are not missed.
+          fromBeginning: true,
+          onError: (error) => errors.push(error),
+        }),
+        (channel) => channel.flush(),
+      )
 
       const bus = new MessageBus()
       new MessagingBridge(bus, channel, registry)
@@ -106,10 +115,6 @@ async function useTopicPair(brokers: string[]) {
       return gateway
     },
 
-    async [Symbol.asyncDispose]() {
-      await Promise.all(disconnects.map((disconnect) => disconnect()))
-      await admin.deleteTopics({ topics: [...topics] })
-      await admin.disconnect()
-    },
+    [Symbol.asyncDispose]: () => disposable.disposeAsync(),
   }
 }

@@ -1,0 +1,10 @@
+services:
+  kafka:
+    image: apache/kafka:4.2.0
+    ports:
+      - 9092:9092
+    healthcheck:
+      test: /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092
+      interval: 5s
+      timeout: 10s
+      retries: 20
