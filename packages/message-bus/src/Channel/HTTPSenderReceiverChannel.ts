@@ -33,8 +33,8 @@ export class HTTPSenderReceiverChannel<
           res.end(JSON.stringify(error))
           return
         }
-        res.writeHead(200)
-        res.end('ok')
+        res.writeHead(202)
+        res.end('Accepted')
         handler(frame)
       })
     }
