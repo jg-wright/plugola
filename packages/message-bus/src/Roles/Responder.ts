@@ -43,3 +43,19 @@ export interface ResponderContext<E extends CommandMessageFactory> {
  * own to `invoke({ onError })` to observe errors without failing it.
  */
 export type ResponderErrorHandler = (error: unknown) => void
+
+/**
+ * Rejects an `invoke` made with `requireResponder` when no responder ran for the
+ * command: none was registered, every one was paused, or none matched its
+ * filter. Distinguishes "nobody handled it" from "handled, with nothing to send".
+ */
+export class NoResponderError extends Error {
+  /** The command that went unhandled. */
+  readonly command: { $name: string }
+
+  constructor(command: { $name: string }) {
+    super(`No responder ran for command "${command.$name}"`)
+    this.name = 'NoResponderError'
+    this.command = command
+  }
+}

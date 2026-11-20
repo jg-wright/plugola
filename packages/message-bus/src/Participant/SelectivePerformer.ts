@@ -26,10 +26,11 @@ export class SelectivePerformer<
     // generically. Each instance binds `P` to a single role, so casting to a
     // rest-parameter signature is sound.
     const call = this.#performer as (...args: Parameters<P>) => ReturnType<P>
-    if (this.#filter(args[0])) return call(...args)
+    if (this.matches(args[0])) return call(...args)
   }
 
-  #filter(message: MessageOf<M>) {
+  /** Whether `message` passes the filter, i.e. whether `perform` would act on it. */
+  matches(message: MessageOf<M>) {
     return this.#filterEntries.every(([key, value]) =>
       typeof value === 'function'
         ? (value as FilterPredicate<M>)(message)

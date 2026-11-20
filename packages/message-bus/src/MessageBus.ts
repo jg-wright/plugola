@@ -51,7 +51,7 @@ export class MessageBus extends Queuable {
     command: CommandMessage<T>,
     context: ResponderContext<CommandMessageFactory<T>>,
     reportError: ResponderErrorHandler,
-  ) => Promise<void>
+  ) => Promise<number>
 
   constructor({
     onResponderError = rethrow,
@@ -222,10 +222,10 @@ export class MessageBus extends Queuable {
   }
 
   /**
-   * Fans a command out to every participant that registered for it and resolves
-   * once they have all settled. The participant set is snapshotted so a
+   * Fans a command out to every participant that registered for it and resolves,
+   * with how many responders ran, once they have all settled. The participant set is snapshotted so a
    * participant (un)registering mid-flight can't move the target; a participant
-   * that has since been removed simply contributes a resolved `undefined`. Prefer
+   * that has since been removed simply contributes no responders. Prefer
    * `gateway.invoke`, which wraps this in a stream; this is the bus-level
    * primitive it calls.
    * @internal
@@ -234,20 +234,22 @@ export class MessageBus extends Queuable {
     command: CommandMessage<T>,
     context: ResponderContext<CommandMessageFactory<T>>,
     reportError: ResponderErrorHandler,
-  ): Promise<void> => {
+  ): Promise<number> => {
     const responderNames = this.#responderRoutes.get(
       command.$factory as CommandMessageFactory<T>,
     )
 
-    if (!responderNames?.size) return
+    if (!responderNames?.size) return 0
 
-    await Promise.all(
-      [...responderNames].map((name) =>
-        this.#participants
-          .get(name)
-          ?.dispatcher.dispatchCommand(command, context, reportError),
+    const counts = await Promise.all(
+      [...responderNames].map(
+        (name) =>
+          this.#participants
+            .get(name)
+            ?.dispatcher.dispatchCommand(command, context, reportError) ?? 0,
       ),
     )
+    return counts.reduce((total, count) => total + count, 0)
   }
 
   /**

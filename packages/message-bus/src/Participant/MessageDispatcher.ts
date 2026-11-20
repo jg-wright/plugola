@@ -64,8 +64,8 @@ export class MessageDispatcher {
   }
 
   /**
-   * Runs every local responder for the command and resolves once they have all
-   * settled. Completion is derived from the responders' own return values: a
+   * Runs every local responder for the command and resolves, with how many ran,
+   * once they have all settled. A paused participant runs none. Completion is derived from the responders' own return values: a
    * filtered-out responder resolves immediately (its `handle` returns
    * `undefined`), so there's no count to keep in sync and nothing to hang on. The
    * responder set is snapshotted, so (un)registering during an in-flight command
@@ -76,14 +76,16 @@ export class MessageDispatcher {
     command: CommandMessage<T>,
     context: ResponderContext<CommandMessageFactory<T>>,
     reportError: ResponderErrorHandler,
-  ): Promise<void> {
-    if (!this.#participant.queue.running) return
+  ): Promise<number> {
+    if (!this.#participant.queue.running) return 0
 
-    const responders = this.#participant.registry.respondersFor(
-      command.$factory as CommandMessageFactory<T>,
-    )
+    const responders = [
+      ...(this.#participant.registry.respondersFor(
+        command.$factory as CommandMessageFactory<T>,
+      ) ?? []),
+    ].filter((performer) => performer.matches(command))
 
-    if (!responders?.size) return
+    if (!responders.length) return 0
 
     this.#bus.notify({
       type: 'respond',
@@ -92,7 +94,7 @@ export class MessageDispatcher {
     })
 
     await Promise.all(
-      [...responders].map(async (performer) => {
+      responders.map(async (performer) => {
         try {
           await performer.perform(command, context)
         } catch (error) {
@@ -100,5 +102,6 @@ export class MessageDispatcher {
         }
       }),
     )
+    return responders.length
   }
 }

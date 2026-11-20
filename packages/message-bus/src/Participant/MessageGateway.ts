@@ -7,10 +7,11 @@ import type {
 import { CANCEL } from '../Roles/Interceptor.ts'
 import type { Interceptor } from '../Roles/Interceptor.ts'
 import type { Subscriber } from '../Roles/Subscriber.ts'
-import type {
-  Responder,
-  ResponderContext,
-  ResponderErrorHandler,
+import {
+  NoResponderError,
+  type Responder,
+  type ResponderContext,
+  type ResponderErrorHandler,
 } from '../Roles/Responder.ts'
 import type { Filter } from '../Filter.ts'
 import type { MessageBus } from '../MessageBus.ts'
@@ -300,10 +301,12 @@ export class MessageGateway {
       signal: AbortSignal
     },
     reportError: ResponderErrorHandler,
+    requireResponder: boolean,
   ) => {
     const result = await this.#emitCommand(command)
     if (result === CANCEL) return
-    await this.#bus.invoke(result, context, reportError)
+    const ran = await this.#bus.invoke(result, context, reportError)
+    if (requireResponder && !ran) throw new NoResponderError(result)
   }
 
   /**
@@ -319,6 +322,12 @@ export class MessageGateway {
    * Pass `signal` to cancel; the same signal is forwarded to responders so they
    * can abort in-flight work.
    *
+   * A command nobody handles completes empty, like one whose responders send
+   * nothing. Pass `requireResponder` to tell them apart: the stream then rejects
+   * with a {@link NoResponderError} if no responder ran (none registered, every
+   * one paused, or none matched its filter). A command an interceptor cancels
+   * still completes empty.
+   *
    * @example
    * ```ts
    * const files = await gateway.invoke(ListFiles('/tmp')).collect()
@@ -333,9 +342,11 @@ export class MessageGateway {
     {
       signal,
       onError = this.#bus.onResponderError,
+      requireResponder = false,
     }: {
       signal?: AbortSignal
       onError?: ResponderErrorHandler
+      requireResponder?: boolean
     } = {},
   ): {
     collect(): Promise<ResponseType<E>[]>
@@ -345,7 +356,14 @@ export class MessageGateway {
     type T = ResponseType<E>
 
     const readableStream = new ReadableStream(
-      new ResponseSource(this, command, this.#invoke, onError, signal),
+      new ResponseSource(
+        this,
+        command,
+        (command, context, reportError) =>
+          this.#invoke(command, context, reportError, requireResponder),
+        onError,
+        signal,
+      ),
     )
 
     return {
