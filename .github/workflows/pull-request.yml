@@ -35,6 +35,6 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - run: npm ci
       - run: npm run build
-      - run: npm test
+      - run: npm run test:run
         env:
           KAFKA_BROKERS: localhost:9092
