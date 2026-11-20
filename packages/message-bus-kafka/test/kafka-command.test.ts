@@ -223,7 +223,7 @@ const registry = TransportableMessageRegistry.create()
   .as<{ orderId: string }, void>()
 const processOrder = registry.commands['process-order']
 
-function sinkBus(options: Partial<KafkaCommandSinkOptions> = {}) {
+function sinkBus(options?: Partial<KafkaCommandSinkOptions>) {
   const bus = new MessageBus()
   const producer = kafka.producer()
   new KafkaCommandSink(bus, { producer, topic: 'orders', registry, ...options })
@@ -232,7 +232,7 @@ function sinkBus(options: Partial<KafkaCommandSinkOptions> = {}) {
   return { app, producer }
 }
 
-function sourceBus(options: Partial<KafkaCommandSourceOptions> = {}) {
+function sourceBus(options?: Partial<KafkaCommandSourceOptions>) {
   const bus = new MessageBus()
   const consumer = kafka.consumer()
   const source = new KafkaCommandSource(bus, {
