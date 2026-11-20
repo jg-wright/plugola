@@ -57,20 +57,20 @@ export class TransportableMessageRegistry<
 
   override message<Name extends string>(name: Name) {
     this.assertUnregisteredMessage(name)
-    const as = (codec?: Partial<Codec<Message>>) => {
+    const As = (codec?: Partial<Codec<Message>>) => {
       this.registerMessage(name, makeTransportable(message(name), codec))
       return this as TransportableMessageRegistry<any, any>
     }
-    return { as: as as TransportableMessageAs<Name, MFs, CFs> }
+    return { as: As as TransportableMessageAs<Name, MFs, CFs> }
   }
 
   override command<Name extends string>(name: Name) {
     this.assertUnregisteredCommand(name)
-    const as = (codec?: Partial<Codec<CommandMessage>>) => {
+    const As = (codec?: Partial<Codec<CommandMessage>>) => {
       this.registerCommand(name, makeTransportable(command(name), codec))
       return this as TransportableMessageRegistry<any, any>
     }
-    return { as: as as TransportableCommandAs<Name, MFs, CFs> }
+    return { as: As as TransportableCommandAs<Name, MFs, CFs> }
   }
 
   /**
