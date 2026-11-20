@@ -127,6 +127,9 @@ export class MessagingBridge {
         break
       }
       case 'command': {
+        // An at-least-once transport may redeliver a frame; don't run a command
+        // twice while the first is still in flight.
+        if (this.#inbound.has(frame.correlationId)) return
         const factory = this.#registry.commandFactoryFor(frame.name)
         if (!factory) return
         this.#invokeForPeer(

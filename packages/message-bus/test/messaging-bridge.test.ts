@@ -7,6 +7,7 @@ import { message } from '../src/Message/Message.ts'
 import type { MessageFactory, MessageOf } from '../src/Message/Message.ts'
 import type { CommandMessageFactory } from '../src/Message/CommandMessage.ts'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
+import type { Frame } from '../src/Channel/Channel.ts'
 
 const flush = () => new Promise((resolve) => setTimeout(resolve))
 
@@ -209,4 +210,59 @@ test('aborting the bridge rejects in-flight commands', async () => {
   bridgeA.abort()
 
   await expect(collected).rejects.toThrow(/aborted/)
+})
+
+test('a redelivered command is ignored while the original is still running', async () => {
+  // An at-least-once transport (e.g. Kafka) can deliver the same frame twice.
+  const sent: Frame[] = []
+  let deliver!: (frame: Frame) => void
+  const bus = new MessageBus()
+  new MessagingBridge(
+    bus,
+    {
+      send: (frame) => sent.push(frame),
+      receive: (handler) => {
+        deliver = handler
+        return () => {}
+      },
+    },
+    registry,
+  )
+  const app = bus.gateway('app')
+  bus.resume()
+
+  const { promise: released, resolve: release } = Promise.withResolvers<void>()
+  const responder = vi.fn(async ({ a, b }, { send }) => {
+    await released
+    send(a + b)
+  })
+  app.register(sum, responder)
+
+  const command: Frame = {
+    kind: 'command',
+    name: 'sum',
+    payload: { a: 1, b: 2 },
+    correlationId: 'c1',
+  }
+  deliver(command)
+  await flush()
+  deliver(command)
+  await flush()
+  release()
+  await flush()
+
+  expect(responder).toHaveBeenCalledOnce()
+  expect(sent).toMatchInlineSnapshot(`
+    [
+      {
+        "correlationId": "c1",
+        "kind": "response",
+        "value": 3,
+      },
+      {
+        "correlationId": "c1",
+        "kind": "response-end",
+      },
+    ]
+  `)
 })
