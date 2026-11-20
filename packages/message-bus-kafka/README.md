@@ -45,14 +45,18 @@ The billing service does the same with the topics swapped:
 `{ send: 'billing-to-web', receive: 'web-to-billing' }`.
 
 To shut down, abort the bridge, then `await channel.flush()` before
-disconnecting the producer so no queued frame is lost.
+disconnecting the producer so no queued frame is lost. Once the bridge is
+aborted the consumer is paused, so frames that arrive before it disconnects are
+left uncommitted for the group's next consumer.
 
 ## Behaviour
 
 - **Lazy consumption.** The consumer is subscribed and run when the bridge
   first registers to receive, so nothing is consumed (and no offset committed)
-  before there is a handler. Give each channel its own consumer, because a
-  consumer can only be run once.
+  before there is a handler. Likewise the consumer is paused whenever every
+  handler has been disposed (e.g. the bridge was aborted), and resumed when one
+  is registered again. Give each channel its own consumer, because a consumer
+  can only be run once.
 - **Batching and order.** `send` queues the frame. Frames queued in the same
   task go to the producer as one batch, and the next batch waits for the
   previous one. By default every frame is keyed with the send topic's name, so
@@ -68,11 +72,43 @@ disconnecting the producer so no queued frame is lost.
     were not sent and are not retried;
   - a record that isn't a frame, as a `KafkaChannelDecodeError`;
   - a receive handler that throws;
-  - a consumer that fails to subscribe or run.
+  - a consumer that fails to subscribe, run, pause or resume.
 
   A throwing handler doesn't fail the Kafka message, so a bad frame can't stall
   the partition. If a command frame is lost, the caller's `invoke` waits until
   it is aborted, so give important invokes a timeout signal.
+
+## Delivery guarantees
+
+Kafka acknowledges each hop separately, and the channel relies on each
+client's own settings for that rather than adding acks of its own.
+
+- **Sending.** A batch counts as sent once the producer's `send` resolves,
+  meaning the broker has acknowledged it according to the producer's `acks`
+  setting. kafkajs defaults to all in-sync replicas. A batch that is still
+  rejected after the client's own retries is reported as a
+  `KafkaChannelSendError`. The channel does not retry it. Those retries can
+  write a batch twice unless the producer is idempotent, so consider
+  `kafka.producer({ idempotent: true })` (kafkajs) or
+  `{ kafkaJS: { idempotent: true } }` (Confluent).
+- **Receiving.** A frame is acknowledged (its offset resolved, then committed
+  by the consumer's auto-commit) as soon as it has been **handed to the
+  bridge**, not when the bus has finished handling it. A command whose
+  responder is still running when the process dies is not redelivered.
+  Its caller sees the command go unanswered.
+- **Redelivery.** A frame handed over but not yet committed when the process
+  crashes or the group rebalances is delivered again, so receivers can see
+  duplicates. The bridge ignores a duplicate command while the original is
+  still running. It can't recognise one after that, or after a restart.
+  Duplicate one-way messages are delivered again too, so make their handlers
+  idempotent where it matters.
+- **Bad frames** (undecodable, or a throwing handler) are acknowledged and
+  reported to `onError` rather than retried, so they can't stall the partition.
+  To dead-letter them, publish `KafkaChannelDecodeError.value` from `onError`.
+
+End to end, a command's `response-end` or `response-error` is its
+acknowledgement: an `invoke` that resolves was handled. A one-way message has no
+end-to-end acknowledgement.
 
 ## Topology
 

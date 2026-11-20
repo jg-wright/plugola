@@ -5,6 +5,7 @@ import type { KafkaConsumer, KafkaProducer } from '../../src/index.ts'
  * and every running consumer subscribed to it is fed new records in order, one
  * at a time, each awaiting the previous `eachMessage` (as a real consumer does
  * within a partition). Delivery happens on a later macrotask, like a network hop.
+ * A paused topic stops being fed after the current message, as in kafkajs.
  */
 export class FakeKafka {
   readonly #logs = new Map<string, FakeRecord[]>()
@@ -33,6 +34,7 @@ export class FakeKafka {
     const consumer: FakeConsumer = {
       topics: [],
       offsets: new Map(),
+      paused: new Set(),
       async subscribe({ topics, fromBeginning }) {
         for (const topic of topics) {
           consumer.topics.push(topic)
@@ -46,6 +48,15 @@ export class FakeKafka {
         consumer.eachMessage = eachMessage
         kafka.#consumers.add(consumer)
         kafka.#feedAll()
+      },
+      pause(topics) {
+        if (!consumer.eachMessage) throw new Error('run must be called first')
+        for (const { topic } of topics) consumer.paused.add(topic)
+      },
+      resume(topics) {
+        if (!consumer.eachMessage) throw new Error('run must be called first')
+        for (const { topic } of topics) consumer.paused.delete(topic)
+        kafka.#feed(consumer)
       },
     }
     return consumer
@@ -78,7 +89,7 @@ export class FakeKafka {
         for (const topic of consumer.topics) {
           const log = this.#logs.get(topic) ?? []
           let offset = consumer.offsets.get(topic) ?? 0
-          while (offset < log.length) {
+          while (offset < log.length && !consumer.paused.has(topic)) {
             const { value } = log[offset++]!
             consumer.offsets.set(topic, offset)
             await consumer.eachMessage!({
@@ -103,6 +114,7 @@ export interface FakeProducer extends KafkaProducer {
 export interface FakeConsumer extends KafkaConsumer {
   topics: string[]
   offsets: Map<string, number>
+  paused: Set<string>
   eachMessage?: Parameters<KafkaConsumer['run']>[0]['eachMessage']
   delivering?: Promise<void>
 }

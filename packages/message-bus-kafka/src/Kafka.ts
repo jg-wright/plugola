@@ -23,4 +23,8 @@ export interface KafkaConsumer {
       message: { value: Uint8Array | string | null }
     }): Promise<void>
   }): Promise<void>
+  /** Stops fetching from `topics`; only valid once `run` has resolved. */
+  pause(topics: { topic: string }[]): void
+  /** Resumes fetching from paused `topics`; only valid once `run` has resolved. */
+  resume(topics: { topic: string }[]): void
 }
