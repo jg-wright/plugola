@@ -34,7 +34,8 @@ export interface KafkaConsumer {
 
 /** What a consumer hands `eachMessage` for each record. */
 export interface KafkaEachMessagePayload {
-  message: { value: Uint8Array | string | null }
+  partition: number
+  message: { offset: string; value: Uint8Array | string | null }
   /**
    * Tells the group this consumer is still alive. kafkajs needs one within its
    * `sessionTimeout` during long processing, or it rebalances the partition away.

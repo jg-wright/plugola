@@ -28,6 +28,11 @@ import { parseValue } from './value.ts'
  *   reported as a {@link KafkaCommandDecodeError} and committed, so it can't
  *   hold up the partition forever.
  *
+ * To stop a record that keeps failing from holding up its partition, pass
+ * `deadLetter`: once its command has failed `maxAttempts` times, the record is
+ * handed to `deadLetter.publish` and committed once that resolves. Undecodable
+ * records go to it straight away.
+ *
  * A record can be handled more than once (after a crash or a rebalance), so
  * responders should be idempotent. Anything they `send` is discarded.
  *
@@ -50,6 +55,9 @@ export class KafkaCommandSource {
   readonly #partitionsConsumedConcurrently?: number
   readonly #heartbeatInterval: number
   readonly #onError: (error: unknown) => void
+  readonly #deadLetter?: KafkaCommandSourceOptions['deadLetter']
+  /** Failed attempts so far, by `partition:offset`, for records not yet committed. */
+  readonly #attempts = new Map<string, number>()
   readonly #aborted = new AbortController()
   #running = false
 
@@ -64,8 +72,11 @@ export class KafkaCommandSource {
       heartbeatInterval = 3_000,
       name = `kafka-command-source:${topic}`,
       onError,
+      deadLetter,
     }: KafkaCommandSourceOptions,
   ) {
+    if (deadLetter && !(deadLetter.maxAttempts >= 1))
+      throw new RangeError('deadLetter.maxAttempts must be at least 1')
     this.#gateway = bus.gateway(name)
     this.#consumer = consumer
     this.#topic = topic
@@ -74,6 +85,7 @@ export class KafkaCommandSource {
     this.#partitionsConsumedConcurrently = partitionsConsumedConcurrently
     this.#heartbeatInterval = heartbeatInterval
     this.#onError = onError
+    this.#deadLetter = deadLetter
     this.#gateway.onAbort((reason) => this.#stop(reason))
   }
 
@@ -110,13 +122,47 @@ export class KafkaCommandSource {
     this.#gateway.abort(this.#gateway.name, reason)
   }
 
-  async #handle({ message, heartbeat }: KafkaEachMessagePayload) {
+  /** Resolving commits the record; throwing leaves it to be retried. */
+  async #handle({ partition, message, heartbeat }: KafkaEachMessagePayload) {
     const signal = this.#aborted.signal
     signal.throwIfAborted()
+    const record = {
+      topic: this.#topic,
+      partition,
+      offset: message.offset,
+      value: message.value,
+    }
 
     const command = this.#decode(message.value)
-    if (!command) return
+    if (command instanceof KafkaCommandDecodeError) {
+      this.#onError(command)
+      if (this.#deadLetter)
+        await this.#publishDeadLetter({
+          ...record,
+          error: command,
+          attempts: 0,
+        })
+      return
+    }
 
+    const id = `${partition}:${message.offset}`
+    try {
+      await this.#invoke(command, heartbeat)
+    } catch (error) {
+      if (signal.aborted) throw error
+      this.#onError(error)
+      const attempts = (this.#attempts.get(id) ?? 0) + 1
+      this.#attempts.set(id, attempts)
+      if (!this.#deadLetter || attempts < this.#deadLetter.maxAttempts)
+        throw error
+      await this.#publishDeadLetter({ ...record, command, error, attempts })
+    }
+    this.#attempts.delete(id)
+  }
+
+  /** Invokes `command`, throwing if any responder threw or none ran. */
+  async #invoke(command: CommandMessage, heartbeat: () => Promise<void>) {
+    const signal = this.#aborted.signal
     const errors: unknown[] = []
     const beat = setInterval(
       () => heartbeat().catch(this.#onError),
@@ -130,30 +176,37 @@ export class KafkaCommandSource {
           onError: (error) => errors.push(error),
         })
         .collect()
-      // An aborted invoke completes rather than rejecting, but the work may be
-      // unfinished, so the record must not be committed.
-      signal.throwIfAborted()
-      if (errors.length) throw new KafkaCommandError(command, errors)
-    } catch (error) {
-      if (!signal.aborted) this.#onError(error)
-      throw error
     } finally {
       clearInterval(beat)
     }
+    // An aborted invoke completes rather than rejecting, but the work may be
+    // unfinished, so the record must not be committed.
+    signal.throwIfAborted()
+    if (errors.length) throw new KafkaCommandError(command, errors)
   }
 
-  /** The record as a command marked from the wire, or `undefined` (reported) if it isn't one. */
-  #decode(value: Uint8Array | string | null): CommandMessage | undefined {
+  async #publishDeadLetter(letter: KafkaDeadLetter) {
+    try {
+      await this.#deadLetter!.publish(letter)
+    } catch (error) {
+      this.#onError(error)
+      throw error
+    }
+  }
+
+  /** The record as a command marked from the wire, or why it isn't one. */
+  #decode(
+    value: Uint8Array | string | null,
+  ): CommandMessage | KafkaCommandDecodeError {
     const record = parseValue(value)
     const factory =
       isCommandRecord(record) && this.#registry.commandFactoryFor(record.name)
+    if (!factory) return new KafkaCommandDecodeError(value)
     try {
-      if (factory) return markFromWire(factory.$decode(record.payload))
-      this.#onError(new KafkaCommandDecodeError(value))
+      return markFromWire(factory.$decode(record.payload))
     } catch (cause) {
-      this.#onError(new KafkaCommandDecodeError(value, { cause }))
+      return new KafkaCommandDecodeError(value, { cause })
     }
-    return undefined
   }
 
   #stop(reason: unknown) {
@@ -203,11 +256,49 @@ export interface KafkaCommandSourceOptions {
   name?: string
   /**
    * Receives every failure: a record that isn't a known command
-   * ({@link KafkaCommandDecodeError}, then committed), a command that failed
-   * ({@link KafkaCommandError} or `NoResponderError`, then retried), or a failed
+   * ({@link KafkaCommandDecodeError}), a command that failed
+   * ({@link KafkaCommandError} or `NoResponderError`), or a failed dead letter,
    * heartbeat or pause. It must not throw.
    */
   onError(error: unknown): void
+  /**
+   * Where records go instead of holding up their partition forever. Without it,
+   * a failing record is retried until it succeeds, and an undecodable one is
+   * committed (dropped).
+   */
+  deadLetter?: {
+    /**
+     * How many times a record's command may fail before the record is
+     * dead-lettered; at least 1. Attempts are counted in memory, so they start
+     * again after a restart or rebalance: a record may be tried more often, but
+     * never less.
+     */
+    maxAttempts: number
+    /**
+     * Sends a failed record somewhere it can be inspected or replayed, such as a
+     * dead-letter topic. Resolving commits the record; throwing leaves it to be
+     * retried (command first).
+     */
+    publish(letter: KafkaDeadLetter): Promise<void>
+  }
+}
+
+/** A record a {@link KafkaCommandSource} gave up on, handed to `deadLetter.publish`. */
+export interface KafkaDeadLetter {
+  topic: string
+  partition: number
+  offset: string
+  /** The record's value as consumed, to republish as is. */
+  value: Uint8Array | string | null
+  /** The decoded command, unless the record couldn't be decoded. */
+  command?: CommandMessage
+  /**
+   * Why: the last attempt's error ({@link KafkaCommandError} or
+   * `NoResponderError`), or a {@link KafkaCommandDecodeError}.
+   */
+  error: unknown
+  /** How many times the command failed; 0 if the record couldn't be decoded. */
+  attempts: number
 }
 
 interface CommandRecord {

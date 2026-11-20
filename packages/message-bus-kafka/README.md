@@ -195,16 +195,62 @@ await source.start()
 | Outcome                                                                 | Record                                                          | `onError` gets            |
 | ----------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------- |
 | Every responder that ran resolved                                       | committed                                                       | nothing                   |
-| A responder threw                                                       | left uncommitted and retried                                    | `KafkaCommandError`       |
-| No responder ran (none registered, all paused, or none matched filters) | left uncommitted and retried                                    | `NoResponderError`        |
-| Not JSON, or not a command in the registry                              | committed, so it can't hold up the partition                    | `KafkaCommandDecodeError` |
+| A responder threw                                                       | retried (dead-lettered after `maxAttempts`, if set)             | `KafkaCommandError`       |
+| No responder ran (none registered, all paused, or none matched filters) | retried (dead-lettered after `maxAttempts`, if set)             | `NoResponderError`        |
+| Not JSON, or not a command in the registry                              | committed (or dead-lettered), so it can't hold up the partition | `KafkaCommandDecodeError` |
 | The source was aborted mid-command                                      | left uncommitted for the group's next consumer; consumer paused | nothing                   |
 
 Retrying is the consumer's own behaviour: kafkajs retries per its `retry`
 config, then restarts from the last committed offset. A failing record holds
-up its partition until it succeeds, which keeps records in order. Key records
-by entity so that one failure only holds up that entity's work, and use
-`partitionsConsumedConcurrently` to handle partitions in parallel.
+up its whole partition until it succeeds, which keeps records in order. That
+includes other entities whose keys hash to the same partition. Keying by
+entity spreads the work so that a failure holds up only a share of it, and
+`partitionsConsumedConcurrently` handles partitions in parallel.
+
+### Dead letters
+
+To stop a record that keeps failing from holding up its partition, give the
+source a `deadLetter`. Once a record's command has failed `maxAttempts` times,
+the record is passed to `publish`, then committed once that resolves. If
+`publish` throws, the record is retried, command first. Undecodable records go
+straight to `publish` instead of being dropped, which keeps a record from a
+newer producer for later:
+
+```typescript
+new KafkaCommandSource(bus, {
+  consumer,
+  topic: 'orders',
+  registry: orders,
+  onError: (error) => logger.warn(error),
+  deadLetter: {
+    maxAttempts: 5,
+    publish: async ({ value, offset, error }) => {
+      await producer.send({
+        topic: 'orders.dlq',
+        messages: [
+          {
+            value: value && Buffer.from(value),
+            headers: { offset, error: String(error) },
+          },
+        ],
+      })
+    },
+  },
+})
+```
+
+The letter carries the record's `topic`, `partition`, `offset` and raw `value`,
+the decoded `command` (when there is one), the last `error`, and how many
+`attempts` failed. Attempts are counted in memory, so they start again after a
+restart or rebalance: a record can get more attempts than `maxAttempts`, never
+fewer.
+
+Dead-lettering a record lets later records with the same key go ahead without
+it. Only use it where that's acceptable.
+
+A responder can also dead-letter a command itself when it knows a failure is
+permanent: catch the error, invoke a command routed to a dead-letter
+`KafkaCommandSink`, and return.
 
 A record can be handled more than once (after a crash, a rebalance, or a
 failure in a sibling responder), so make responders idempotent. While a

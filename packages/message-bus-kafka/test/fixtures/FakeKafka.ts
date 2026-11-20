@@ -99,7 +99,9 @@ export class FakeKafka {
             const { value } = log[offset]!
             try {
               await consumer.eachMessage!({
+                partition: 0,
                 message: {
+                  offset: String(offset),
                   value: value === null ? null : encoder.encode(value),
                 },
                 heartbeat: async () => {

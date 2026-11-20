@@ -12,6 +12,7 @@ import {
   KafkaCommandSource,
   type KafkaCommandSinkOptions,
   type KafkaCommandSourceOptions,
+  type KafkaDeadLetter,
 } from '../src/index.ts'
 import { FakeKafka } from './fixtures/FakeKafka.ts'
 
@@ -165,6 +166,84 @@ test('a record that is not a known command is reported and committed', async () 
     expect.any(KafkaCommandDecodeError),
   ])
   expect(handled).toHaveBeenCalledOnce()
+})
+
+test('a record that keeps failing is dead-lettered after maxAttempts, then committed', async () => {
+  const publish = vi.fn(async (_letter: KafkaDeadLetter) => {})
+  const { app, consumer, source } = sourceBus({
+    deadLetter: { maxAttempts: 3, publish },
+  })
+  const handled = vi.fn().mockRejectedValue(new Error('boom'))
+  app.register(processOrder, handled)
+  await source.start()
+
+  kafka.publish('orders', record('o1'), record('o2'))
+  await vi.waitFor(() => expect(consumer.offsets.get('orders')).toBe(2))
+
+  expect(handled).toHaveBeenCalledTimes(6)
+  expect(publish.mock.calls.map(([letter]) => letter)).toEqual([
+    {
+      topic: 'orders',
+      partition: 0,
+      offset: '0',
+      value: expect.any(Uint8Array),
+      command: expect.objectContaining({ orderId: 'o1' }),
+      error: expect.any(KafkaCommandError),
+      attempts: 3,
+    },
+    expect.objectContaining({ offset: '1', attempts: 3 }),
+  ])
+})
+
+test('a dead letter that fails to publish leaves its record to be retried', async () => {
+  const publish = vi
+    .fn<(letter: KafkaDeadLetter) => Promise<void>>()
+    .mockRejectedValueOnce(new Error('dlq down'))
+    .mockResolvedValue(undefined)
+  const { app, consumer, source } = sourceBus({
+    deadLetter: { maxAttempts: 1, publish },
+  })
+  const handled = vi.fn().mockRejectedValue(new Error('boom'))
+  app.register(processOrder, handled)
+  await source.start()
+
+  kafka.publish('orders', record('o1'))
+  await vi.waitFor(() => expect(consumer.offsets.get('orders')).toBe(1))
+
+  expect(handled).toHaveBeenCalledTimes(2)
+  expect(publish).toHaveBeenCalledTimes(2)
+  expect(onError).toHaveBeenCalledWith(new Error('dlq down'))
+})
+
+test('with a dead letter, an undecodable record goes to it without being attempted', async () => {
+  const publish = vi.fn(async (_letter: KafkaDeadLetter) => {})
+  const { consumer, source } = sourceBus({
+    deadLetter: { maxAttempts: 3, publish },
+  })
+  await source.start()
+
+  kafka.publish(
+    'orders',
+    JSON.stringify({ name: 'from-the-future', payload: {} }),
+  )
+  await vi.waitFor(() => expect(consumer.offsets.get('orders')).toBe(1))
+
+  expect(publish.mock.calls.map(([letter]) => letter)).toEqual([
+    {
+      topic: 'orders',
+      partition: 0,
+      offset: '0',
+      value: expect.any(Uint8Array),
+      error: expect.any(KafkaCommandDecodeError),
+      attempts: 0,
+    },
+  ])
+})
+
+test('deadLetter.maxAttempts must be at least 1', () => {
+  expect(() =>
+    sourceBus({ deadLetter: { maxAttempts: 0, publish: async () => {} } }),
+  ).toThrow(RangeError)
 })
 
 test('aborting the source aborts the command in hand, leaves it uncommitted, and pauses', async () => {
