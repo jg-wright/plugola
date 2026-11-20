@@ -1,5 +1,5 @@
 /**
- * The part of a Kafka producer the channel uses — satisfied by a `kafkajs`
+ * The part of a Kafka producer this package uses — satisfied by a `kafkajs`
  * `Producer` and by `@confluentinc/kafka-javascript`'s `KafkaJS.Producer`.
  */
 export interface KafkaProducer {
@@ -10,7 +10,7 @@ export interface KafkaProducer {
 }
 
 /**
- * The part of a Kafka consumer the channel uses — satisfied by a `kafkajs`
+ * The part of a Kafka consumer this package uses — satisfied by a `kafkajs`
  * `Consumer` and by `@confluentinc/kafka-javascript`'s `KafkaJS.Consumer`.
  */
 export interface KafkaConsumer {
@@ -19,12 +19,25 @@ export interface KafkaConsumer {
     fromBeginning?: boolean
   }): Promise<void>
   run(config: {
-    eachMessage(payload: {
-      message: { value: Uint8Array | string | null }
-    }): Promise<void>
+    partitionsConsumedConcurrently?: number
+    /**
+     * Handles one record. Resolving acknowledges it (its offset is committed);
+     * throwing leaves it uncommitted, to be retried.
+     */
+    eachMessage(payload: KafkaEachMessagePayload): Promise<void>
   }): Promise<void>
   /** Stops fetching from `topics`; only valid once `run` has resolved. */
   pause(topics: { topic: string }[]): void
   /** Resumes fetching from paused `topics`; only valid once `run` has resolved. */
   resume(topics: { topic: string }[]): void
+}
+
+/** What a consumer hands `eachMessage` for each record. */
+export interface KafkaEachMessagePayload {
+  message: { value: Uint8Array | string | null }
+  /**
+   * Tells the group this consumer is still alive. kafkajs needs one within its
+   * `sessionTimeout` during long processing, or it rebalances the partition away.
+   */
+  heartbeat(): Promise<void>
 }

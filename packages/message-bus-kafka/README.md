@@ -3,7 +3,9 @@
 A Kafka [`Channel`](../message-bus/README.md#transports-bridging-buses) for
 `@plugola/message-bus`: bridge two `MessageBus`es in separate services over a
 pair of Kafka topics, with messages and commands (including streamed responses,
-cancellation and errors) relayed by a `MessagingBridge`.
+cancellation and errors) relayed by a `MessagingBridge`. Or use a topic as a
+durable work queue of commands, committed only once handled
+([Durable commands](#durable-commands)).
 
 ```sh
 npm install @plugola/message-bus @plugola/message-bus-kafka
@@ -139,6 +141,78 @@ new MessagingBridge(bus, auditChannel, audit, { name: 'audit-bridge' })
 Every bridge needs its own `name` because each joins the bus as a participant.
 Because a message that arrived from the wire is never relayed again, one bus
 can bridge to many topics without echoes.
+
+## Durable commands
+
+The channel relays traffic between two live buses. To use a topic as a durable
+work queue instead, use a `KafkaCommandSink` on the producing side and a
+`KafkaCommandSource` on the consuming side. A record is committed only once its
+command has been handled successfully, and a failure leaves it to be retried.
+
+Both sides share a registry of the commands the topic carries. Responses can't
+travel back over the topic, so give these commands a `void` response type:
+
+```typescript
+// contract.ts
+export const orders = TransportableMessageRegistry.create()
+  .command('process-order')
+  .as<{ orderId: string }, void>()
+export const processOrder = orders.commands['process-order']
+```
+
+**Producing.** The sink registers as the responder for every command in the
+registry and publishes each invoke as one record. The invoke resolves once the
+broker has acknowledged the record and rejects if the producer fails, so a
+resolved invoke means the work is durably queued:
+
+```typescript
+new KafkaCommandSink(bus, {
+  producer,
+  topic: 'orders',
+  registry: orders,
+  key: (command) => command.orderId, // per-order ordering, spread over partitions
+})
+
+await app.invoke(processOrder({ orderId: 'o1' })).collect()
+```
+
+**Consuming.** The source invokes each record's command on its bus and waits
+for every responder to settle:
+
+```typescript
+const source = new KafkaCommandSource(bus, {
+  consumer,
+  topic: 'orders',
+  registry: orders,
+  onError: (error) => logger.warn(error),
+})
+app.register(processOrder, async (command) => {
+  await saveOrder(command)
+})
+await source.start()
+```
+
+| Outcome                                                                 | Record                                                          | `onError` gets            |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------- |
+| Every responder that ran resolved                                       | committed                                                       | nothing                   |
+| A responder threw                                                       | left uncommitted and retried                                    | `KafkaCommandError`       |
+| No responder ran (none registered, all paused, or none matched filters) | left uncommitted and retried                                    | `NoResponderError`        |
+| Not JSON, or not a command in the registry                              | committed, so it can't hold up the partition                    | `KafkaCommandDecodeError` |
+| The source was aborted mid-command                                      | left uncommitted for the group's next consumer; consumer paused | nothing                   |
+
+Retrying is the consumer's own behaviour: kafkajs retries per its `retry`
+config, then restarts from the last committed offset. A failing record holds
+up its partition until it succeeds, which keeps records in order. Key records
+by entity so that one failure only holds up that entity's work, and use
+`partitionsConsumedConcurrently` to handle partitions in parallel.
+
+A record can be handled more than once (after a crash, a rebalance, or a
+failure in a sibling responder), so make responders idempotent. While a
+command is running the source heartbeats every `heartbeatInterval` ms (3000 by
+default), so slow work doesn't get the partition rebalanced away.
+
+Commands the source invokes are marked as coming from the wire, so a sink or
+bridge on the same bus doesn't publish them again.
 
 ## Testing
 

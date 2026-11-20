@@ -5,7 +5,12 @@ import {
   TransportableMessageRegistry,
 } from '@plugola/message-bus'
 import { Kafka, logLevel, Partitioners } from 'kafkajs'
-import { KafkaChannel } from '../src/index.ts'
+import {
+  KafkaChannel,
+  KafkaCommandError,
+  KafkaCommandSink,
+  KafkaCommandSource,
+} from '../src/index.ts'
 
 // End-to-end over a real Kafka broker, so it only runs when one is given:
 //   KAFKA_BROKERS=localhost:9092 npm test
@@ -44,6 +49,37 @@ test.skipIf(!brokers)(
     expect((await heard).x).toBe(1)
     expect(await web.invoke(sum({ a: 2, b: 3 })).collect()).toEqual([5, 6])
     expect(kafka.errors).toEqual([])
+  },
+  60_000,
+)
+
+test.skipIf(!brokers)(
+  'publishes commands through a real broker, retrying one that fails',
+  async () => {
+    await using kafka = await useTopicPair(brokers!)
+
+    const registry = TransportableMessageRegistry.create()
+      .command('process-order')
+      .as<{ orderId: string }, void>()
+    const processOrder = registry.commands['process-order']
+
+    const producing = await kafka.sinkBus(registry, kafka.topics[0])
+    const consuming = await kafka.sourceBus(registry, kafka.topics[0])
+
+    const attempts: string[] = []
+    const { promise: handled, resolve } = Promise.withResolvers<void>()
+    consuming.gateway.register(processOrder, ({ orderId }) => {
+      attempts.push(orderId)
+      if (attempts.length === 1) throw new Error('transient failure')
+      resolve()
+    })
+    await consuming.source.start()
+
+    await producing.invoke(processOrder({ orderId: 'o1' })).collect()
+    await handled
+
+    expect(attempts).toEqual(['o1', 'o1'])
+    expect(kafka.errors).toEqual([expect.any(KafkaCommandError)])
   },
   60_000,
 )
@@ -113,6 +149,43 @@ async function useTopicPair(brokers: string[]) {
       const gateway = bus.gateway('app')
       bus.resume()
       return gateway
+    },
+
+    /** A bus whose commands in `registry` are published to `topic`. */
+    async sinkBus(registry: TransportableMessageRegistry, topic: string) {
+      const producer = kafka.producer({
+        createPartitioner: Partitioners.DefaultPartitioner,
+      })
+      await producer.connect()
+      disposable.defer(() => producer.disconnect())
+
+      const bus = new MessageBus()
+      new KafkaCommandSink(bus, { producer, topic, registry })
+      const gateway = bus.gateway('app')
+      bus.resume()
+      return gateway
+    },
+
+    /** A bus that handles the commands in `registry` from `topic`, once started. */
+    async sourceBus(registry: TransportableMessageRegistry, topic: string) {
+      const consumer = kafka.consumer({
+        groupId: `mbk-${id}-source`,
+        retry: { initialRetryTime: 100 },
+      })
+      await consumer.connect()
+      disposable.defer(() => consumer.disconnect())
+
+      const bus = new MessageBus()
+      const source = new KafkaCommandSource(bus, {
+        consumer,
+        topic,
+        registry,
+        fromBeginning: true,
+        onError: (error) => errors.push(error),
+      })
+      const gateway = bus.gateway('app')
+      bus.resume()
+      return { gateway, source }
     },
 
     [Symbol.asyncDispose]: () => disposable.disposeAsync(),

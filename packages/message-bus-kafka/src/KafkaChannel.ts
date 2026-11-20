@@ -1,5 +1,6 @@
 import type { Channel, Frame } from '@plugola/message-bus'
 import type { KafkaConsumer, KafkaProducer } from './Kafka.ts'
+import { parseValue } from './value.ts'
 import { KafkaChannelDecodeError, KafkaChannelSendError } from './Error.ts'
 
 /**
@@ -226,15 +227,8 @@ export interface KafkaChannelTopics {
 
 /** Parses a Kafka message value as a frame, or `undefined` if it isn't one. */
 function decodeFrame(value: Uint8Array | string | null): Frame | undefined {
-  if (value === null) return undefined
-  try {
-    const data: unknown = JSON.parse(
-      typeof value === 'string' ? value : decoder.decode(value),
-    )
-    return isFrame(data) ? data : undefined
-  } catch {
-    return undefined
-  }
+  const data = parseValue(value)
+  return isFrame(data) ? data : undefined
 }
 
 function isFrame(data: unknown): data is Frame {
@@ -244,5 +238,3 @@ function isFrame(data: unknown): data is Frame {
     typeof (data as { kind?: unknown }).kind === 'string'
   )
 }
-
-const decoder = new TextDecoder()
