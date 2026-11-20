@@ -6,6 +6,7 @@ import type { MessageGateway } from '../Participant/MessageGateway.ts'
 import type { Channel, Frame, SerializedError } from '../Channel/Channel.ts'
 import type { TransportableMessageRegistry } from '../MessageRegistry/TransportableMessageRegistry.ts'
 import { onAbort } from '../lang/AbortSignal.ts'
+import { isFromWire, markFromWire } from './Wire.ts'
 
 /**
  * A Messaging Bridge (EIP): couples a local {@link MessageBus} to a peer bus over
@@ -91,31 +92,37 @@ export class MessagingBridge {
    * until the peer's `response`/`response-end`/`response-error` frames arrive.
    */
   #relayCommand(factory: CommandMessageFactory & Transportable<any>) {
-    this.#gateway.register(factory, (command, { send, signal }) => {
-      if (isFromWire(command)) return
-      const correlationId = this.#correlationId()
-      return new Promise<void>((resolve, reject) => {
-        this.#pending.set(correlationId, { send, resolve, reject })
-        this.#channel.send({
-          kind: 'command',
-          name: factory.$name,
-          payload: factory.$encode(command),
-          correlationId,
-        })
-        // If the caller cancels before the peer finishes, tell the peer to stop and
-        // settle here. Once the command has settled (response-end/-error), the entry
-        // is gone and this is a no-op — so completion never sends a stray abort.
-        onAbort(() => {
-          if (!this.#pending.delete(correlationId)) return
+    // Filtered rather than returning early, so a command from the wire doesn't
+    // count as handled here (see `invoke`'s `requireResponder`).
+    const notFromWire = { $name: (command: object) => !isFromWire(command) }
+    this.#gateway.register(
+      factory,
+      notFromWire,
+      (command, { send, signal }) => {
+        const correlationId = this.#correlationId()
+        return new Promise<void>((resolve, reject) => {
+          this.#pending.set(correlationId, { send, resolve, reject })
           this.#channel.send({
-            kind: 'abort',
+            kind: 'command',
+            name: factory.$name,
+            payload: factory.$encode(command),
             correlationId,
-            reason: reasonText(signal.reason),
           })
-          resolve()
-        }, signal)
-      })
-    })
+          // If the caller cancels before the peer finishes, tell the peer to stop and
+          // settle here. Once the command has settled (response-end/-error), the entry
+          // is gone and this is a no-op — so completion never sends a stray abort.
+          onAbort(() => {
+            if (!this.#pending.delete(correlationId)) return
+            this.#channel.send({
+              kind: 'abort',
+              correlationId,
+              reason: reasonText(signal.reason),
+            })
+            resolve()
+          }, signal)
+        })
+      },
+    )
   }
 
   #receive(frame: Frame) {
@@ -217,17 +224,6 @@ interface PendingCommand {
   reject(error: unknown): void
 }
 
-/** Whether a message reached us from the wire — such a message is never relayed on. */
-function isFromWire(message: object): boolean {
-  return (message as Record<symbol, unknown>)[FROM_WIRE] === true
-}
-
-/** Tags a decoded message as wire-originated (shared across bridges, so none re-relay it). */
-function markFromWire<M extends object>(message: M): M {
-  ;(message as Record<symbol, unknown>)[FROM_WIRE] = true
-  return message
-}
-
 /** Reduces an error to a JSON-safe envelope for the wire (the original class is lost). */
 function serializeError(error: unknown): SerializedError {
   if (error instanceof Error)
@@ -249,5 +245,3 @@ function reasonText(reason: unknown): string | undefined {
   if (reason instanceof Error) return reason.message
   return String(reason)
 }
-
-const FROM_WIRE = Symbol('fromWire')

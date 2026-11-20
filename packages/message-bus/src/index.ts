@@ -29,3 +29,4 @@ export {
   type PostMessageEndpoint,
 } from './Channel/PostMessageChannel.ts'
 export * from './Bridge/MessagingBridge.ts'
+export * from './Bridge/Wire.ts'

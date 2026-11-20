@@ -8,6 +8,8 @@ import type { MessageFactory, MessageOf } from '../src/Message/Message.ts'
 import type { CommandMessageFactory } from '../src/Message/CommandMessage.ts'
 import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 import type { Frame } from '../src/Channel/Channel.ts'
+import { markFromWire } from '../src/Bridge/Wire.ts'
+import { NoResponderError } from '../src/Roles/Responder.ts'
 
 const flush = () => new Promise((resolve) => setTimeout(resolve))
 
@@ -265,4 +267,12 @@ test('a redelivered command is ignored while the original is still running', asy
       },
     ]
   `)
+})
+
+test('a bridge does not count as the responder for a command from the wire', async () => {
+  // It won't relay the command back, so `requireResponder` must not see it as handled.
+  const fromWire = markFromWire(sum({ a: 1, b: 2 }))
+  await expect(
+    appB.invoke(fromWire, { requireResponder: true }).collect(),
+  ).rejects.toThrow(NoResponderError)
 })
