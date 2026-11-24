@@ -3,11 +3,11 @@ import {
   type CommandMessage,
   type MessageBus,
   type MessageGateway,
-  type TransportableMessageRegistry,
 } from '@plugola/message-bus'
 import type { KafkaConsumer, KafkaEachMessagePayload } from './Kafka.ts'
 import { KafkaCommandDecodeError, KafkaCommandError } from './Error.ts'
 import { parseValue } from './value.ts'
+import type { KafkaDeliverableRegistry } from './KafkaDeliverableRegistry.ts'
 
 /**
  * Handles commands from a Kafka topic (published by a {@link KafkaCommandSink})
@@ -34,7 +34,9 @@ import { parseValue } from './value.ts'
  * records go to it straight away.
  *
  * A record can be handled more than once (after a crash or a rebalance), so
- * responders should be idempotent. Anything they `send` is discarded.
+ * responders should be idempotent. The registry is a
+ * {@link KafkaDeliverableRegistry}, so every command responds with `void`: there
+ * is no caller to send a response to.
  *
  * @example
  * ```ts
@@ -50,7 +52,7 @@ export class KafkaCommandSource {
   readonly #gateway: MessageGateway
   readonly #consumer: KafkaConsumer
   readonly #topic: string
-  readonly #registry: TransportableMessageRegistry
+  readonly #registry: KafkaDeliverableRegistry
   readonly #fromBeginning?: boolean
   readonly #partitionsConsumedConcurrently?: number
   readonly #heartbeatInterval: number
@@ -233,8 +235,12 @@ export interface KafkaCommandSourceOptions {
   consumer: KafkaConsumer
   /** The topic to consume commands from. */
   topic: string
-  /** The commands to handle; shared with the producing side. */
-  registry: TransportableMessageRegistry
+  /**
+   * The commands to handle, shared with the producing side's
+   * {@link KafkaCommandSink}. Only `void` commands fit: see
+   * {@link KafkaDeliverableRegistry}.
+   */
+  registry: KafkaDeliverableRegistry
   /**
    * Passed to `consumer.subscribe` when set (a `kafkajs` option). With
    * `@confluentinc/kafka-javascript`, set `fromBeginning` in the consumer's

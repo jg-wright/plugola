@@ -149,16 +149,42 @@ work queue instead, use a `KafkaCommandSink` on the producing side and a
 `KafkaCommandSource` on the consuming side. A record is committed only once its
 command has been handled successfully, and a failure leaves it to be retried.
 
-Both sides share a registry of the commands the topic carries. Responses can't
-travel back over the topic, so give these commands a `void` response type:
+Both sides share a `KafkaDeliverableRegistry` of the commands the topic
+carries:
 
 ```typescript
 // contract.ts
-export const orders = TransportableMessageRegistry.create()
+export const orders = KafkaDeliverableRegistry.create()
   .command('process-order')
-  .as<{ orderId: string }, void>()
+  .as<{ orderId: string }>()
 export const processOrder = orders.commands['process-order']
 ```
+
+### Why commands respond with `void`
+
+The producer's `invoke` resolves as soon as Kafka has stored the record. The
+work happens later, in the consuming service, and nothing travels back over
+the topic. So there is never a response for the caller to receive, and the
+registry only accepts commands whose response type is `void`. It checks this
+when you compile:
+
+```typescript
+KafkaDeliverableRegistry.create()
+  .command('process-order')
+  .as<{ orderId: string }>() // ✓ responds with void
+  .command('get-order')
+  .as<{ orderId: string }, Order>() // ✗ a command that responds
+
+registry.addCommand(command<{ orderId: string }, void>('cancel-order')) // ✓
+registry.addCommand(command<{ orderId: string }>('archive-order')) // ✗ responds with `unknown`
+registry.message('order-placed') // ✗ commands only
+```
+
+The sink and source accept only a `KafkaDeliverableRegistry`. A plain
+`TransportableMessageRegistry` doesn't fit, even one holding only `void`
+commands. If you need a response from another service, use the
+[channel](#usage): its `invoke` waits for the remote responder and returns
+what it sent.
 
 **Producing.** The sink registers as the responder for every command in the
 registry and publishes each invoke as one record. The invoke resolves once the

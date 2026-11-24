@@ -3,9 +3,9 @@ import {
   type CommandMessage,
   type MessageBus,
   type MessageGateway,
-  type TransportableMessageRegistry,
 } from '@plugola/message-bus'
 import type { KafkaProducer } from './Kafka.ts'
+import type { KafkaDeliverableRegistry } from './KafkaDeliverableRegistry.ts'
 
 /**
  * Publishes commands to a Kafka topic as durable work, for a
@@ -14,9 +14,10 @@ import type { KafkaProducer } from './Kafka.ts'
  * The sink joins the bus as a participant and registers as a responder for
  * every command in the registry. Invoking one produces a single record and
  * completes once the broker has acknowledged it, so a resolved `invoke` means
- * the work is durably queued, and a rejected one means it wasn't. Responses
- * can't come back over the topic, so these commands' response type should be
- * `void`.
+ * the work is durably queued, and a rejected one means it wasn't. It doesn't
+ * mean the work was done: that happens later, in the source, and nothing comes
+ * back over the topic. So the registry is a {@link KafkaDeliverableRegistry},
+ * whose commands all respond with `void`.
  *
  * The registry is the routing table: give each topic its own sink, listing the
  * commands it carries. A command that came off a wire (e.g. from a
@@ -82,8 +83,12 @@ export interface KafkaCommandSinkOptions {
   producer: KafkaProducer
   /** The topic records are produced to. */
   topic: string
-  /** The commands to publish; shared with the consuming side. */
-  registry: TransportableMessageRegistry
+  /**
+   * The commands to publish, shared with the consuming side's
+   * {@link KafkaCommandSource}. Only `void` commands fit: see
+   * {@link KafkaDeliverableRegistry}.
+   */
+  registry: KafkaDeliverableRegistry
   /**
    * The Kafka key for each record, which picks its partition: records with the
    * same key are consumed in order. Defaults to `topic` for every record, so all

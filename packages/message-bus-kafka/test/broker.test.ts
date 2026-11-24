@@ -10,6 +10,7 @@ import {
   KafkaCommandError,
   KafkaCommandSink,
   KafkaCommandSource,
+  KafkaDeliverableRegistry,
 } from '../src/index.ts'
 
 // End-to-end over a real Kafka broker, so it only runs when one is given:
@@ -58,9 +59,9 @@ test.skipIf(!brokers)(
   async () => {
     await using kafka = await TopicPair.create(brokers!)
 
-    const registry = TransportableMessageRegistry.create()
+    const registry = KafkaDeliverableRegistry.create()
       .command('process-order')
-      .as<{ orderId: string }, void>()
+      .as<{ orderId: string }>()
     const processOrder = registry.commands['process-order']
 
     const producing = await kafka.sinkBus(registry, kafka.topics[0])
@@ -109,14 +110,14 @@ class TopicPair implements AsyncDisposable {
   static async create(brokers: string[]) {
     const topicPair = new TopicPair(brokers)
     await topicPair.#admin.connect()
+    topicPair.#disposable.defer(() => topicPair.#admin.disconnect())
     await topicPair.#admin.createTopics({
       waitForLeaders: true,
       topics: topicPair.topics.map((topic) => ({ topic, numPartitions: 1 })),
     })
-    topicPair.#disposable.defer(async () => {
-      await topicPair.#admin.deleteTopics({ topics: [...topicPair.topics] })
-      await topicPair.#admin.disconnect()
-    })
+    topicPair.#disposable.defer(() =>
+      topicPair.#admin.deleteTopics({ topics: [...topicPair.topics] }),
+    )
     return topicPair
   }
 
@@ -128,15 +129,14 @@ class TopicPair implements AsyncDisposable {
     const producer = this.kafka.producer({
       createPartitioner: Partitioners.DefaultPartitioner,
     })
+    await producer.connect()
+    this.#disposable.defer(() => producer.disconnect())
 
     const consumer = this.kafka.consumer({
       groupId: `mbk-${this.#id}-${name}`,
     })
-
-    await Promise.all([producer.connect(), consumer.connect()])
-    this.#disposable.defer(async () => {
-      await Promise.all([producer.disconnect(), consumer.disconnect()])
-    })
+    await consumer.connect()
+    this.#disposable.defer(() => consumer.disconnect())
 
     const channel = this.#disposable.adopt(
       new KafkaChannel({
@@ -159,7 +159,7 @@ class TopicPair implements AsyncDisposable {
   }
 
   /** A bus whose commands in `registry` are published to `topic`. */
-  async sinkBus(registry: TransportableMessageRegistry, topic: string) {
+  async sinkBus(registry: KafkaDeliverableRegistry, topic: string) {
     const producer = this.kafka.producer({
       createPartitioner: Partitioners.DefaultPartitioner,
     })
@@ -174,7 +174,7 @@ class TopicPair implements AsyncDisposable {
   }
 
   /** A bus that handles the commands in `registry` from `topic`, once started. */
-  async sourceBus(registry: TransportableMessageRegistry, topic: string) {
+  async sourceBus(registry: KafkaDeliverableRegistry, topic: string) {
     const consumer = this.kafka.consumer({
       groupId: `mbk-${this.#id}-source`,
       retry: { initialRetryTime: 100 },

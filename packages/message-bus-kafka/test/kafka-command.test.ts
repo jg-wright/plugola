@@ -1,9 +1,9 @@
 import { beforeEach, expect, test, vi } from 'vitest'
 import {
   markFromWire,
+  message,
   MessageBus,
   NoResponderError,
-  TransportableMessageRegistry,
 } from '@plugola/message-bus'
 import {
   KafkaCommandDecodeError,
@@ -12,6 +12,7 @@ import {
   KafkaCommandSource,
   type KafkaCommandSinkOptions,
   type KafkaCommandSourceOptions,
+  KafkaDeliverableRegistry,
   type KafkaDeadLetter,
 } from '../src/index.ts'
 import { FakeKafka } from './fixtures/FakeKafka.ts'
@@ -297,9 +298,19 @@ test('start passes fromBeginning and partitionsConsumedConcurrently when set', a
   })
 })
 
-const registry = TransportableMessageRegistry.create()
+test('a deliverable registry refuses messages at runtime too', () => {
+  // Calls that don't compile, made anyway (e.g. from JavaScript).
+  const deliverable = KafkaDeliverableRegistry.create() as any
+  expect(() => deliverable.message('order-placed')).toThrow(/only commands/)
+  expect(() => deliverable.addMessage(message('order-placed'))).toThrow(
+    /only commands/,
+  )
+})
+
+const registry = KafkaDeliverableRegistry.create()
   .command('process-order')
-  .as<{ orderId: string }, void>()
+  .as<{ orderId: string }>()
+
 const processOrder = registry.commands['process-order']
 
 function sinkBus(options?: Partial<KafkaCommandSinkOptions>) {
