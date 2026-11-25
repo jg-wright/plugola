@@ -1,6 +1,6 @@
 {
   "name": "@plugola/message-bus",
-  "version": "9.0.5",
+  "version": "9.1.0",
   "description": "Plugola event management",
   "type": "module",
   "exports": {
