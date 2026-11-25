@@ -1,13 +1,13 @@
 {
   "packages/graph": "3.0.3",
   "packages/logger": "5.0.4",
-  "packages/message-bus": "9.0.5",
-  "packages/message-bus-kafka": "1.0.0",
+  "packages/message-bus": "9.1.0",
+  "packages/message-bus-kafka": "1.1.0",
   "packages/plugin-manager": "9.3.0",
   "packages/query-params": "4.0.1",
   "packages/queue": "1.2.0",
   "packages/store": "9.0.4",
   "packages/store-logger": "3.0.8",
-  "packages/test": "4.1.1",
+  "packages/test": "4.1.2",
   "packages/vendor-plugin-manager": "5.0.2"
 }

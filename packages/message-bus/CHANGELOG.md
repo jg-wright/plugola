@@ -1,5 +1,19 @@
 # Changelog
 
+## [9.1.0](https://github.com/jg-wright/plugola/compare/message-bus-v9.0.5...message-bus-v9.1.0) (2026-11-25)
+
+
+### Features
+
+* **message-bus:** add requireResponder option to invoke ([f23d564](https://github.com/jg-wright/plugola/commit/f23d564388c92f0a735e4ee6525471955ef7a5cb))
+* **message-bus:** export the from-wire mark for other transports ([a576cae](https://github.com/jg-wright/plugola/commit/a576cae0dab2afe8bdce18cd1ac4b39a9157c0a3))
+* stronger typing of kafka delivery commands ([a6de2b7](https://github.com/jg-wright/plugola/commit/a6de2b7b07a52f0306b3d8a47533cea88a7d6210))
+
+
+### Bug Fixes
+
+* **message-bus:** ignore a redelivered command while the original is running ([40e9341](https://github.com/jg-wright/plugola/commit/40e93416c45ef519a78644b82eb59efbb87c3751))
+
 ## [9.0.5](https://github.com/jg-wright/plugola/compare/message-bus-v9.0.4...message-bus-v9.0.5) (2026-11-18)
 
 
