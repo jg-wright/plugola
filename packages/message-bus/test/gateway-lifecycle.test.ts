@@ -5,6 +5,7 @@ import type { MessageGateway } from '../src/Participant/MessageGateway.ts'
 import { message } from '../src/Message/Message.ts'
 import type { MessageOf } from '../src/Message/Message.ts'
 import { command } from '../src/Message/CommandMessage.ts'
+import { NoResponderError } from '../src/Roles/Responder.ts'
 
 const TestMessage = message<{ foo: string }>('test')
 const TestCommand = command<{ foo: string }, string>('test')
@@ -136,6 +137,39 @@ describe('invoke completion', () => {
     expect(
       await gatewayB.invoke(TestCommand({ foo: 'actual' })).collect(),
     ).toEqual([])
+  })
+
+  describe('with requireResponder', () => {
+    const invoke = () =>
+      gatewayB
+        .invoke(TestCommand({ foo: 'x' }), { requireResponder: true })
+        .collect()
+
+    test('rejects when there are no registrants', async () => {
+      await expect(invoke()).rejects.toThrow(NoResponderError)
+    })
+
+    test('rejects when the only registrant is paused', async () => {
+      gatewayA.register(TestCommand, () => {})
+      gatewayB.pause('a')
+      await expect(invoke()).rejects.toThrow(NoResponderError)
+    })
+
+    test('rejects when every responder is filtered out', async () => {
+      gatewayA.register(TestCommand, { foo: 'never' }, () => {})
+      await expect(invoke()).rejects.toThrow(NoResponderError)
+    })
+
+    test('completes when a responder ran, even if it sent nothing', async () => {
+      gatewayA.register(TestCommand, { foo: 'never' }, () => {})
+      gatewayA.register(TestCommand, () => {})
+      expect(await invoke()).toEqual([])
+    })
+
+    test('completes empty when an interceptor cancels the command', async () => {
+      gatewayA.intercept(TestCommand, () => CANCEL)
+      expect(await invoke()).toEqual([])
+    })
   })
 
   test('completes when a responder returns without any explicit signal', async () => {

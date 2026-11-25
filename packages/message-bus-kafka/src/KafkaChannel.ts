@@ -1,5 +1,6 @@
 import type { Channel, Frame } from '@plugola/message-bus'
 import type { KafkaConsumer, KafkaProducer } from './Kafka.ts'
+import { parseValue } from './value.ts'
 import { KafkaChannelDecodeError, KafkaChannelSendError } from './Error.ts'
 
 /**
@@ -52,6 +53,9 @@ export class KafkaChannel implements Channel {
   readonly #outbox: Frame[] = []
   #sending?: Promise<void>
   #consuming = false
+  /** `run` has resolved, so the consumer can be paused and resumed. */
+  #running = false
+  #paused = false
 
   constructor({
     producer,
@@ -82,7 +86,10 @@ export class KafkaChannel implements Channel {
   /**
    * Registers a handler for frames from the receive topic. The first call
    * subscribes the consumer and runs it, so nothing is consumed (and no offset
-   * committed) before there is a handler to deliver to.
+   * committed) before there is a handler to deliver to. Likewise, while every
+   * handler is disposed the consumer is paused, so frames that arrive meanwhile
+   * stay uncommitted — they're delivered once a handler is registered again, or
+   * to the group's next consumer.
    */
   receive(handler: (frame: Frame) => void) {
     this.#handlers.add(handler)
@@ -90,8 +97,10 @@ export class KafkaChannel implements Channel {
       this.#consuming = true
       this.#consume()
     }
+    this.#syncPaused()
     return () => {
       this.#handlers.delete(handler)
+      this.#syncPaused()
     }
   }
 
@@ -134,6 +143,23 @@ export class KafkaChannel implements Channel {
       await this.#consumer.run({
         eachMessage: async ({ message }) => this.#deliver(message.value),
       })
+      this.#running = true
+      // Every handler may have been disposed while the consumer was starting.
+      this.#syncPaused()
+    } catch (error) {
+      this.#onError(error)
+    }
+  }
+
+  /** Pauses the consumer while there is no handler, and resumes it after. */
+  #syncPaused() {
+    const paused = this.#handlers.size === 0
+    if (!this.#running || paused === this.#paused) return
+    this.#paused = paused
+    const topics = [{ topic: this.#topics.receive }]
+    try {
+      if (paused) this.#consumer.pause(topics)
+      else this.#consumer.resume(topics)
     } catch (error) {
       this.#onError(error)
     }
@@ -162,7 +188,8 @@ export interface KafkaChannelOptions {
   producer: KafkaProducer
   /**
    * A connected consumer, dedicated to this channel: the channel subscribes it
-   * to `topics.receive` and runs it, which a consumer allows only once.
+   * to `topics.receive` and runs it, which a consumer allows only once, and
+   * pauses it while no handler is registered.
    */
   consumer: KafkaConsumer
   topics: KafkaChannelTopics
@@ -182,7 +209,7 @@ export interface KafkaChannelOptions {
    * Receives every asynchronous failure: a batch the producer rejected
    * ({@link KafkaChannelSendError}), a Kafka message that isn't a frame
    * ({@link KafkaChannelDecodeError}), a throwing receive handler, or the
-   * consumer failing to subscribe or run. It must not throw.
+   * consumer failing to subscribe, run, pause or resume. It must not throw.
    *
    * A lost command frame leaves the caller's `invoke` waiting until it is
    * aborted, so consider pairing invokes with a timeout signal.
@@ -200,15 +227,8 @@ export interface KafkaChannelTopics {
 
 /** Parses a Kafka message value as a frame, or `undefined` if it isn't one. */
 function decodeFrame(value: Uint8Array | string | null): Frame | undefined {
-  if (value === null) return undefined
-  try {
-    const data: unknown = JSON.parse(
-      typeof value === 'string' ? value : decoder.decode(value),
-    )
-    return isFrame(data) ? data : undefined
-  } catch {
-    return undefined
-  }
+  const data = parseValue(value)
+  return isFrame(data) ? data : undefined
 }
 
 function isFrame(data: unknown): data is Frame {
@@ -218,5 +238,3 @@ function isFrame(data: unknown): data is Frame {
     typeof (data as { kind?: unknown }).kind === 'string'
   )
 }
-
-const decoder = new TextDecoder()

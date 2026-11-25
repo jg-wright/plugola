@@ -228,6 +228,51 @@ test('inbound frames reach every handler until it is disposed', async () => {
   expect(second.mock.calls).toEqual([[frame('a')], [frame('b')]])
 })
 
+test('while no handler is registered the consumer is paused, so frames wait unconsumed', async () => {
+  // e.g. between a bridge being aborted and its consumer disconnecting
+  const consumer = kafka.consumer()
+  const ch = channel({ consumer })
+  ch.receive(() => {})()
+  await settled()
+
+  kafka.publish('in', JSON.stringify(frame('a')))
+  await settled()
+  expect(consumer.offsets.get('in')).toBe(0)
+
+  const handler = vi.fn()
+  ch.receive(handler)
+  await settled()
+  expect(handler.mock.calls).toEqual([[frame('a')]])
+  expect(consumer.offsets.get('in')).toBe(1)
+})
+
+test('disposing the last handler mid-batch stops consumption after the current frame', async () => {
+  const consumer = kafka.consumer()
+  const ch = channel({ consumer })
+  const handler = vi.fn(() => dispose())
+  const dispose = ch.receive(handler)
+  await settled()
+
+  kafka.publish('in', JSON.stringify(frame('a')), JSON.stringify(frame('b')))
+  await settled()
+
+  expect(handler.mock.calls).toEqual([[frame('a')]])
+  expect(consumer.offsets.get('in')).toBe(1)
+})
+
+test('a consumer that fails to pause is reported', async () => {
+  const consumer = kafka.consumer()
+  const failure = new Error('not assigned')
+  vi.spyOn(consumer, 'pause').mockImplementation(() => {
+    throw failure
+  })
+  const dispose = channel({ consumer }).receive(() => {})
+  await settled()
+  dispose()
+
+  expect(onError.mock.calls).toEqual([[failure]])
+})
+
 test('a message that is not a frame is reported, and consumption carries on', async () => {
   const ch = channel()
   const handler = vi.fn()

@@ -11,7 +11,9 @@
     "build": "tsc --build",
     "clean": "tsc --build --clean && rimraf dist",
     "start": "tsc --watch --preserveWatchOutput",
-    "test": "vitest --run && npm run test:types",
+    "test": "npm run test:run && npm run test:types",
+    "test:dev": "docker-compose up --detach --wait && KAFKA_BROKERS=localhost:9092 npm run test:run && npm run test:types; code=$?; docker-compose down; exit $code",
+    "test:run": "vitest --run",
     "test:types": "tsc -p test/tsconfig.json"
   },
   "keywords": [

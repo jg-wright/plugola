@@ -1,3 +1,6 @@
 export * from './Error.ts'
 export * from './Kafka.ts'
 export * from './KafkaChannel.ts'
+export * from './KafkaCommandSink.ts'
+export * from './KafkaCommandSource.ts'
+export * from './KafkaDeliverableRegistry.ts'

@@ -4,8 +4,14 @@ import {
   MessagingBridge,
   TransportableMessageRegistry,
 } from '@plugola/message-bus'
-import { Kafka, logLevel, Partitioners } from 'kafkajs'
-import { KafkaChannel } from '../src/index.ts'
+import { Admin, Kafka, logLevel, Partitioners } from 'kafkajs'
+import {
+  KafkaChannel,
+  KafkaCommandError,
+  KafkaCommandSink,
+  KafkaCommandSource,
+  KafkaDeliverableRegistry,
+} from '../src/index.ts'
 
 // End-to-end over a real Kafka broker, so it only runs when one is given:
 //   KAFKA_BROKERS=localhost:9092 npm test
@@ -15,7 +21,7 @@ const brokers = process.env.KAFKA_BROKERS?.split(',')
 test.skipIf(!brokers)(
   'bridges messages and commands between two buses over a real broker',
   async () => {
-    await using kafka = await useTopicPair(brokers!)
+    await using kafka = await TopicPair.create(brokers!)
 
     const registry = TransportableMessageRegistry.create()
       .message('clicked')
@@ -48,73 +54,148 @@ test.skipIf(!brokers)(
   60_000,
 )
 
-/**
- * Creates two fresh single-partition topics and hands out bridged buses wired to
- * them; disposing disconnects every client and deletes the topics.
- */
-async function useTopicPair(brokers: string[]) {
-  const disposable = new AsyncDisposableStack()
-  const kafka = new Kafka({
-    brokers,
-    clientId: 'message-bus-kafka-test',
-    logLevel: logLevel.NOTHING,
-  })
-  const id = crypto.randomUUID()
-  const topics = [`mbk-${id}-a`, `mbk-${id}-b`] as const
+test.skipIf(!brokers)(
+  'publishes commands through a real broker, retrying one that fails',
+  async () => {
+    await using kafka = await TopicPair.create(brokers!)
 
-  const admin = kafka.admin()
-  await admin.connect()
-  await admin.createTopics({
-    waitForLeaders: true,
-    topics: topics.map((topic) => ({ topic, numPartitions: 1 })),
-  })
-  disposable.defer(async () => {
-    await admin.deleteTopics({ topics: [...topics] })
-    await admin.disconnect()
-  })
+    const registry = KafkaDeliverableRegistry.create()
+      .command('process-order')
+      .as<{ orderId: string }>()
+    const processOrder = registry.commands['process-order']
 
-  const errors: unknown[] = []
+    const producing = await kafka.sinkBus(registry, kafka.topics[0])
+    const consuming = await kafka.sourceBus(registry, kafka.topics[0])
 
-  return {
-    topics,
-    errors,
+    const attempts: string[] = []
+    const { promise: handled, resolve } = Promise.withResolvers<void>()
+    consuming.gateway.register(processOrder, ({ orderId }) => {
+      attempts.push(orderId)
+      if (attempts.length === 1) throw new Error('transient failure')
+      resolve()
+    })
+    await consuming.source.start()
 
-    async bridgedBus(
-      registry: TransportableMessageRegistry,
-      name: string,
-      channelTopics: { send: string; receive: string },
-    ) {
-      const producer = kafka.producer({
-        createPartitioner: Partitioners.DefaultPartitioner,
-      })
+    await producing.invoke(processOrder({ orderId: 'o1' })).collect()
+    await handled
 
-      const consumer = kafka.consumer({ groupId: `mbk-${id}-${name}` })
+    expect(attempts).toEqual(['o1', 'o1'])
+    expect(kafka.errors).toEqual([expect.any(KafkaCommandError)])
+  },
+  60_000,
+)
 
-      await Promise.all([producer.connect(), consumer.connect()])
-      disposable.defer(async () => {
-        await Promise.all([producer.disconnect(), consumer.disconnect()])
-      })
+class TopicPair implements AsyncDisposable {
+  #admin: Admin
+  #disposable = new AsyncDisposableStack()
+  #id = crypto.randomUUID()
 
-      const channel = disposable.adopt(
-        new KafkaChannel({
-          producer,
-          consumer,
-          topics: channelTopics,
-          // The topics are new, so read them from the start: frames produced
-          // before this consumer joins its group are not missed.
-          fromBeginning: true,
-          onError: (error) => errors.push(error),
-        }),
-        (channel) => channel.flush(),
-      )
+  errors: unknown[] = []
+  readonly kafka: Kafka
+  readonly topics = [`mbk-${this.#id}-a`, `mbk-${this.#id}-b`] as const
 
-      const bus = new MessageBus()
-      new MessagingBridge(bus, channel, registry)
-      const gateway = bus.gateway('app')
-      bus.resume()
-      return gateway
-    },
+  private constructor(brokers: string[]) {
+    this.kafka = new Kafka({
+      brokers,
+      clientId: 'message-bus-kafka-test',
+      logLevel: logLevel.NOTHING,
+    })
+    this.#admin = this.kafka.admin()
+  }
 
-    [Symbol.asyncDispose]: () => disposable.disposeAsync(),
+  /**
+   * Creates two fresh single-partition topics and hands out bridged buses wired to
+   * them; disposing disconnects every client and deletes the topics.
+   */
+  static async create(brokers: string[]) {
+    const topicPair = new TopicPair(brokers)
+    await topicPair.#admin.connect()
+    topicPair.#disposable.defer(() => topicPair.#admin.disconnect())
+    await topicPair.#admin.createTopics({
+      waitForLeaders: true,
+      topics: topicPair.topics.map((topic) => ({ topic, numPartitions: 1 })),
+    })
+    topicPair.#disposable.defer(() =>
+      topicPair.#admin.deleteTopics({ topics: [...topicPair.topics] }),
+    )
+    return topicPair
+  }
+
+  async bridgedBus(
+    registry: TransportableMessageRegistry,
+    name: string,
+    channelTopics: { send: string; receive: string },
+  ) {
+    const producer = this.kafka.producer({
+      createPartitioner: Partitioners.DefaultPartitioner,
+    })
+    await producer.connect()
+    this.#disposable.defer(() => producer.disconnect())
+
+    const consumer = this.kafka.consumer({
+      groupId: `mbk-${this.#id}-${name}`,
+    })
+    await consumer.connect()
+    this.#disposable.defer(() => consumer.disconnect())
+
+    const channel = this.#disposable.adopt(
+      new KafkaChannel({
+        producer,
+        consumer,
+        topics: channelTopics,
+        // The topics are new, so read them from the start: frames produced
+        // before this consumer joins its group are not missed.
+        fromBeginning: true,
+        onError: (error) => this.errors.push(error),
+      }),
+      (channel) => channel.flush(),
+    )
+
+    const bus = new MessageBus()
+    new MessagingBridge(bus, channel, registry)
+    const gateway = bus.gateway('app')
+    bus.resume()
+    return gateway
+  }
+
+  /** A bus whose commands in `registry` are published to `topic`. */
+  async sinkBus(registry: KafkaDeliverableRegistry, topic: string) {
+    const producer = this.kafka.producer({
+      createPartitioner: Partitioners.DefaultPartitioner,
+    })
+    await producer.connect()
+    this.#disposable.defer(() => producer.disconnect())
+
+    const bus = new MessageBus()
+    new KafkaCommandSink(bus, { producer, topic, registry })
+    const gateway = bus.gateway('app')
+    bus.resume()
+    return gateway
+  }
+
+  /** A bus that handles the commands in `registry` from `topic`, once started. */
+  async sourceBus(registry: KafkaDeliverableRegistry, topic: string) {
+    const consumer = this.kafka.consumer({
+      groupId: `mbk-${this.#id}-source`,
+      retry: { initialRetryTime: 100 },
+    })
+    await consumer.connect()
+    this.#disposable.defer(() => consumer.disconnect())
+
+    const bus = new MessageBus()
+    const source = new KafkaCommandSource(bus, {
+      consumer,
+      topic,
+      registry,
+      fromBeginning: true,
+      onError: (error) => this.errors.push(error),
+    })
+    const gateway = bus.gateway('app')
+    bus.resume()
+    return { gateway, source }
+  }
+
+  [Symbol.asyncDispose]() {
+    return this.#disposable.disposeAsync()
   }
 }

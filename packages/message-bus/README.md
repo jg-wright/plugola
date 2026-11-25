@@ -240,6 +240,18 @@ const bus = new MessageBus({
 })
 ```
 
+### Requiring a responder
+
+A command nobody handles completes empty, just like one whose responders send
+nothing. That includes a responder that is paused or whose filter doesn't
+match. To tell the two apart, pass `requireResponder`. The stream then rejects
+with a `NoResponderError` if no responder ran. A command cancelled by an
+interceptor still completes empty.
+
+```typescript
+await app.invoke(SaveOrder(order), { requireResponder: true }).collect()
+```
+
 ## Observing the bus
 
 `bus.observe` sees every message as it is emitted (with the sender's name),

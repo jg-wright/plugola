@@ -86,6 +86,9 @@ export type PayloadArgs<T extends object> = {} extends T
 /** The message a factory builds — its payload plus {@link Message} metadata. */
 export type MessageOf<F> = F extends (...args: any) => infer M ? M : never
 
+/** A factory's payload: the message it builds, less the framework's `$` metadata. */
+export type PayloadOf<F> = Omit<MessageOf<F>, `$${string}`>
+
 /**
  * Builds a factory that stamps each message with its `$name` and a `$factory`
  * back-reference. Shared by {@link message} and {@link command}: a command
