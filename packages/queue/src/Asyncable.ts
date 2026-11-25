@@ -21,14 +21,14 @@ export function Asyncable<C extends new (...args: any[]) => Queue<any, any>>(
     protected override execItems(exec: (item: any) => any, items: any[]) {
       while (this.running && items.length > 0) {
         const item = items.shift()
-        const next = this.#promise
-          .then(() => this.#whenRunning())
+        const promise = this.#promise
+          .then(this.#whenRunning)
           .then(() => exec(item))
-        this.#promise = onError ? next.catch(onError) : next
+        this.#promise = onError ? promise.catch(onError) : promise
       }
     }
 
-    async #whenRunning() {
+    readonly #whenRunning = async () => {
       while (!this.running) await this.#resumed.promise
     }
   }
